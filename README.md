@@ -1,2 +1,7 @@
 # First-Mile-Ride-Sharing-Problem
 This repository provides the code used in Mathematical Programming Formulations for the First-Mile Ride-Sharing Problem
+
+This code is created as a solution in Microsoft Visual Studio 2022.
+
+# Dependencies
+- Gurobi
