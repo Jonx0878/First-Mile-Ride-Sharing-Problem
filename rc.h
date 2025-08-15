@@ -5,9 +5,6 @@
 #include <set>
 #include <vector>
 
-#include "cvrpsep/capsep.h"
-#include "cvrpsep/cnstrmgr.h"
-
 
 struct RC_Inequality {
 	std::unordered_set<int> set;
@@ -18,53 +15,17 @@ struct RC_Inequality2 {
 	std::unordered_set<int> set;
 };
 
-class mycallback : public GRBCallback {
-public:
-	std::vector<RC_Inequality>& violated_inequalities;
-	int max_violations;
-	const std::set<int>& customers;
-	GRBVar& alpha;
-	std::vector<GRBVar>& xi;
-	int counter = 0;
-	double& max_viol;
-
-	mycallback(std::vector<RC_Inequality>& viol_ineqs, int max_violations, const std::set<int>& const_customers,
-		GRBVar& alpha, std::vector<GRBVar>& xi, double& max_viol)
-		: violated_inequalities(viol_ineqs),
-		max_violations(max_violations),
-		customers(const_customers),
-		alpha(alpha),
-		xi(xi),
-		max_viol(max_viol)
-	{
-	}
-
-protected:
-	void callback() {
-		if (where == GRB_CB_MIPSOL) {
-			double objval = getDoubleInfo(GRB_CB_MIPSOL_OBJ);
-			if (objval >= 1e-6) {
-				std::unordered_set<int> S;
-				for (const int& i : customers) {
-					if (getSolution(xi[i]) >= 1 - 1e-6) {
-						S.insert(i);
-					}
-				}
-				violated_inequalities.emplace_back(RC_Inequality(S, std::round(S.size() - getSolution(alpha))));
-				max_viol = std::max(max_viol, objval);
-				if (counter < max_violations && objval >= 0.01 && max_viol - objval >= 1) {
-					GRBLinExpr lexpr;
-					for (const int& i : customers) {
-						if (S.find(i) != S.end()) lexpr += xi[i];
-						else lexpr += 1 - xi[i];
-					}
-					addLazy(lexpr <= customers.size() - 1);
-					counter++;
-				}
-			}
+void remove_constraints_from_model(GRBModel* model, const int& no_base_constraints) {
+	GRBConstr* constrs = model->getConstrs();
+	GRBConstr constr;
+	for (int i = no_base_constraints; i < model->get(GRB_IntAttr_NumConstrs); i++) {
+		constr = constrs[i];
+		double slack = constr.get(GRB_DoubleAttr_Slack);
+		if (slack >= 0.001) {
+			model->remove(constr);
 		}
 	}
-};
+}
 
 GRBModel* setup_rcc_model(
 	GRBVar& alpha,
