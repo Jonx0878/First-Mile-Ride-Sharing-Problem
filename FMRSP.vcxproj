@@ -140,49 +140,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="cvrpsep\basegrph.cpp" />
-    <ClCompile Include="cvrpsep\binpack.cpp" />
-    <ClCompile Include="cvrpsep\blocks.cpp" />
-    <ClCompile Include="cvrpsep\brnching.cpp" />
-    <ClCompile Include="cvrpsep\capsep.cpp" />
-    <ClCompile Include="cvrpsep\cnstrmgr.cpp" />
-    <ClCompile Include="cvrpsep\combsep.cpp" />
-    <ClCompile Include="cvrpsep\compcuts.cpp" />
-    <ClCompile Include="cvrpsep\compress.cpp" />
-    <ClCompile Include="cvrpsep\cutbase.cpp" />
-    <ClCompile Include="cvrpsep\fcapfix.cpp" />
-    <ClCompile Include="cvrpsep\fcisep.cpp" />
-    <ClCompile Include="cvrpsep\fcits.cpp" />
-    <ClCompile Include="cvrpsep\glmsep.cpp" />
-    <ClCompile Include="cvrpsep\grsearch.cpp" />
-    <ClCompile Include="cvrpsep\hpmstar.cpp" />
-    <ClCompile Include="cvrpsep\htoursep.cpp" />
-    <ClCompile Include="cvrpsep\intap.cpp" />
-    <ClCompile Include="cvrpsep\memmod.cpp" />
-    <ClCompile Include="cvrpsep\mstarsep.cpp" />
-    <ClCompile Include="cvrpsep\mxf.cpp" />
-    <ClCompile Include="cvrpsep\newhtour.cpp" />
-    <ClCompile Include="cvrpsep\sort.cpp" />
-    <ClCompile Include="cvrpsep\strcomb.cpp" />
-    <ClCompile Include="cvrpsep\strngcmp.cpp" />
-    <ClCompile Include="cvrpsep\twomatch.cpp" />
-    <ClCompile Include="main.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="arc_based_dl.h" />
-    <ClInclude Include="col_gen.h" />
     <ClInclude Include="event_based.h" />
     <ClInclude Include="fmrsp.h" />
-    <ClInclude Include="multi_com_flow.h" />
-    <ClInclude Include="one_com_flow.h" />
     <ClInclude Include="load.h" />
-    <ClInclude Include="location_based.h" />
     <ClInclude Include="rc.h" />
     <ClInclude Include="route_and_event_based.h" />
     <ClInclude Include="route_based.h" />
-    <ClInclude Include="separation.h" />
-    <ClInclude Include="time_flow.h" />
-    <ClInclude Include="two_com_flow.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
