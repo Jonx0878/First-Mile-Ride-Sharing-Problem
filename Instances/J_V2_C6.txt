@@ -1,0 +1,17 @@
+INSTANCE:	V2_C6
+VEHICLES:	2
+CUSTOMERS:	6
+TIME UB:	5657
+VEHICLE SECTION
+VEH. NO.	X_COORD		Y_COORD		CAPACITY	OCCUPANCY	Arr. T
+       0	    951		     34		       3	        0	  5657
+       1	    144		    823		       3	        2	   656
+CUSTOMER SECTION
+CUST. NO.	X_COORD		Y_COORD		DEMAND		Arr. T
+       0	    512		    755		     0		  5657
+       1	    949		    249		     1		  1899
+       2	    312		    869		     1		   584
+       3	    423		    273		     1		  1381
+       4	    828		    257		     1		  1374
+       5	    409		    644		     1		   370
+       6	    550		     85		     1		  1871

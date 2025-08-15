@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <GUROBI_HOME>C:\gurobi\win64</GUROBI_HOME>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemDefinitionGroup />
+  <ItemGroup>
+    <BuildMacro Include="GUROBI_HOME">
+      <Value>$(GUROBI_HOME)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>

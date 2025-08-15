@@ -1,0 +1,15 @@
+INSTANCE:	V2_C4
+VEHICLES:	2
+CUSTOMERS:	4
+TIME UB:	8486
+VEHICLE SECTION
+VEH. NO.	X_COORD		Y_COORD		CAPACITY	OCCUPANCY	Arr. T
+       0	    270		    308		       5	        3	   647
+       1	     41		     75		       5	        3	  1151
+CUSTOMER SECTION
+CUST. NO.	X_COORD		Y_COORD		DEMAND		Arr. T
+       0	    637		    511		     0		  8486
+       1	     16		    175		     1		  2073
+       2	    814		    650		     1		   512
+       3	    913		    504		     1		   777
+       4	    607		    971		     1		  1231

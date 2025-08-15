@@ -1,0 +1,28 @@
+INSTANCE:	P-n15-k4
+VEHICLES:	4
+CUSTOMERS:	15
+TIME UB:	357
+VEHICLE SECTION
+VEH. NO.	X_COORD		Y_COORD		CAPACITY	OCCUPANCY	Arr. T
+       0	     58		     48		       4	        0	   357
+       1	     63		     69		       5	        3	    83
+       2	     43		     67		       4	        0	   357
+       3	     58		     27		       5	        1	    31
+CUSTOMER SECTION
+CUST. NO.	X_COORD		Y_COORD		DEMAND		Arr. T
+       0	     30		     40		     0		   357
+       1	     37		     52		     2		    52
+       2	     49		     49		     1		    48
+       3	     52		     64		     1		   101
+       4	     31		     62		     4		    84
+       5	     52		     33		     2		    67
+       6	     42		     41		     1		    26
+       7	     52		     41		     4		    45
+       8	     57		     58		     4		    77
+       9	     62		     42		     2		    92
+      10	     42		     57		     2		    53
+      11	     27		     68		     2		    83
+      12	     37		     69		     2		    81
+      13	     61		     33		     4		    69
+      14	     62		     63		     3		   108
+      15	     45		     35		     2		    58

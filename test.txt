@@ -1,0 +1,37 @@
+Set parameter Username
+Academic license - for non-commercial use only - expires 2025-09-18
+V2_C10
+Loading time: 7 milliseconds
+# Vertices: 0
+Constructing Routes...
+# Routes: 82
+Building Model...
+Model Constructed.
+Gurobi Optimizer version 11.0.3 build v11.0.3rc0 (win64 - Windows 10.0 (19045.2))
+
+CPU model: 13th Gen Intel(R) Core(TM) i7-1355U, instruction set [SSE2|AVX|AVX2]
+Thread count: 10 physical cores, 12 logical processors, using up to 12 threads
+
+Optimize a model with 14 rows, 82 columns and 292 nonzeros
+Model fingerprint: 0x222b47ed
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  Objective range  [7e+00, 1e+03]
+  Bounds range     [1e+00, 1e+00]
+  RHS range        [1e+00, 1e+00]
+Presolve removed 2 rows and 14 columns
+Presolve time: 0.01s
+Presolved: 12 rows, 68 columns, 245 nonzeros
+
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0   -1.9895000e+04   8.500000e+01   0.000000e+00      0s
+      12   -2.6330000e+03   0.000000e+00   0.000000e+00      0s
+
+Solved in 12 iterations and 0.01 seconds (0.00 work units)
+Optimal objective -2.633000000e+03
+#Vars: 82
+Solve time: 0.03 seconds
+Objective: -2633.00
+LP Solve Time: 0.02
+RC Separation Time: 0.00
+Add Vars Time: 0.00
