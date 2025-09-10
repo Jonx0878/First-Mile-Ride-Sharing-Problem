@@ -16,6 +16,8 @@ const int TIME_LIMIT = 3600;
 const bool RELAX = false;
 const bool SEPARATE_RCI = true;
 const bool SILENT = true;
+const bool PREPROCESS = true;
+
 
 std::vector<std::string> A_INSTANCES = {
 	"A-n24-k7", "A-n24-k8", "A-n25-k8", "A-n27-k8", "A-n27-k9", "A-n28-k9", "A-n29-k9", "A-n33-k10",
@@ -89,14 +91,14 @@ int main() {
 		//std::streambThis suf* originalCerrBuffer = std::cerr.rdbuf();
 		//std::cout.rdbuf(logFile.rdbuf());
 		//std::cerr.rdbuf(logFile.rdbuf());
-		FMRSP inst = FMRSP(file, "3I", "CMCF", "TTCF", THREADS, TIME_LIMIT);
+		FMRSP inst = FMRSP(file, "3I", "COCF", "TTCF", THREADS, TIME_LIMIT);
 		//inst.preprocess();
 		//EB inst = EB(file, "TIME", THREADS, TIME_LIMIT);
 		//RB inst = RB(file, THREADS, TIME_LIMIT);
 		//inst.print_all_routes();
 
-		if (RELAX) inst.solve_root_relaxation(SEPARATE_RCI, SILENT);
-		else inst.solve_to_optimality(SEPARATE_RCI, SILENT);
+		if (RELAX) inst.solve_root_relaxation(SEPARATE_RCI, SILENT, PREPROCESS);
+		else inst.solve_to_optimality(SEPARATE_RCI, SILENT, PREPROCESS);
 		//int threads = std::thread::hardware_concurrency();
 		//inst.model->getEnv().set(GRB_IntParam_Threads, 2);
 		//std::cout << inst.model->get(GRB_IntParam_ThreadLimit) << std::endl;
@@ -160,6 +162,9 @@ int main() {
 		//}
 		//for (int idx : inst.sigma_indices) {
 		//	if (inst.sigma[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.sigma[idx].get(GRB_DoubleAttr_X) << " " << inst.sigma[idx].get(GRB_StringAttr_VarName) << std::endl;
+		//}
+		//for (int idx : inst.omega_indices) {
+		//	if (inst.omega[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.omega[idx].get(GRB_DoubleAttr_X) << " " << inst.omega[idx].get(GRB_StringAttr_VarName) << std::endl;
 		//}
 		//for (const int i : inst.dest_and_cust) {
 		//	if (i > 0) continue;
