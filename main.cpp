@@ -73,7 +73,7 @@ std::vector<std::string> TEST_INSTANCES{
 int main() {
 	//{ "A-n60-k19", "B-n58-k19", "P-n75-k25", "X-n82-k27", "M-n90-k30", "F-n101-k33" }
 
-	for (const std::string file : {"B-n50-k16"}) {
+	for (const std::string file : {"A-n51-k17"}) {
 		auto start = std::chrono::high_resolution_clock::now();
 		// Works only in visual studio
 		//FILE* stream;
@@ -89,7 +89,7 @@ int main() {
 		//std::streambThis suf* originalCerrBuffer = std::cerr.rdbuf();
 		//std::cout.rdbuf(logFile.rdbuf());
 		//std::cerr.rdbuf(logFile.rdbuf());
-		FMRSP inst = FMRSP(file, "3I", "COCF", "TTCF", "CAP", THREADS, TIME_LIMIT);
+		FMRSP inst = FMRSP(file, "3I", "CMCF", "TTCF", THREADS, TIME_LIMIT);
 		//inst.preprocess();
 		//EB inst = EB(file, "TIME", THREADS, TIME_LIMIT);
 		//RB inst = RB(file, THREADS, TIME_LIMIT);
@@ -151,6 +151,27 @@ int main() {
 		//}
 		//for (int idx : inst.tau_indices) {
 		//	if (inst.tau[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.tau[idx].get(GRB_DoubleAttr_X) << " " << inst.tau[idx].get(GRB_StringAttr_VarName) << std::endl;
+		//}
+		//for (int idx : inst.psi_indices) {
+		//	if (inst.psi[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.psi[idx].get(GRB_DoubleAttr_X) << " " << inst.psi[idx].get(GRB_StringAttr_VarName) << std::endl;
+		//}
+		//for (int idx : inst.gamma_indices) {
+		//	if (inst.gamma[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.gamma[idx].get(GRB_DoubleAttr_X) << " " << inst.gamma[idx].get(GRB_StringAttr_VarName) << std::endl;
+		//}
+		//for (int idx : inst.sigma_indices) {
+		//	if (inst.sigma[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.sigma[idx].get(GRB_DoubleAttr_X) << " " << inst.sigma[idx].get(GRB_StringAttr_VarName) << std::endl;
+		//}
+		//for (const int i : inst.dest_and_cust) {
+		//	if (i > 0) continue;
+		//	for (const int j : inst.dest_and_cust) {
+		//		if (i >= j) continue;
+		//		std::cout << i << "->" << j << ": " << inst.cust_dist[i][j] << std::endl;
+		//	}
+		//}
+		//for (const int k : inst.vehicles) {
+		//	for (const int j : inst.dest_and_cust) {
+		//		std::cout << k << "->" << j << ": " << inst.veh_dist[k][j] << std::endl;
+		//	}
 		//}
 		//GRBVar* vars = inst.model->getVars();
 		//for (int idx = 0; idx < inst.model->get(GRB_IntAttr_NumVars); idx++) {

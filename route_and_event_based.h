@@ -787,8 +787,6 @@ public:
         total_lp_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-    void remove_constraints() { remove_constraints_from_model(model, no_base_constraints); };
-
     void solve_root_relaxation(bool separate_rci = true, bool silent = true) {
         if (model_construction_time == 0) create_model(true, silent);
 

@@ -13,7 +13,13 @@ class FMRSP {
 private:
     // Construct indices of variables
     void construct_indices() {
-        const int no_cust_d_squared = int(pow(no_cust_d, 2));
+		// ----------------------------- Main Variables -----------------------------
+        // Tau
+        if (main_type == "3I" || main_type == "2I") {
+            for (const int& i : customers) {
+                tau_indices.insert(i);
+            }
+        }
 
         // Gamma
         if (main_type == "3I" ||  main_type == "2I") {
@@ -25,7 +31,7 @@ private:
         }
 
         // Chi
-        if (main_type == "3I" || time_type == "TIME") {
+        if (main_type == "3I") {
             for (const int& k : vehicles) {
                 for (const int& i : customers) {
                     for (const int j : dest_and_cust) {
@@ -33,13 +39,6 @@ private:
                         chi_indices.insert(k * no_cust_d_squared + i * no_cust_d + j);
                     }
                 }
-            }
-        }
-
-        // Phi
-        if (sec_type == "DL") {
-            for (const int& i : customers) {
-                phi_indices.insert(i);
             }
         }
 
@@ -53,8 +52,16 @@ private:
             }
         }
 
+        // ----------------------------- Capacity Variables -----------------------------
+        // Phi
+        if (cap_type == "DL") {
+            for (const int& i : customers) {
+                phi_indices.insert(i);
+            }
+        }
+
         // Zeta
-        if (sec_type == "COCF") {
+        if (cap_type == "COCF") {
             for (const int& i : customers) {
                 for (const int j : dest_and_cust) {
                     if (i == j) continue;
@@ -63,36 +70,37 @@ private:
             }
         }
 
-        // Rho
-        if (time_type == "TOCF") {
-            for (const int& i : customers) {
-                for (const int& j : dest_and_cust) {
-                    if (i == j) continue;
-                    rho_indices.insert(i * no_cust_d + j);
-                }
-            }
-        }
-
-        // Rho_veh
-        if (time_type == "TOCF") {
-            for (const int& k : vehicles) {
-                for (const int& j : customers) {
-                    rho_veh_indices.insert(k * no_cust_d + j);
-                }
-            }
-        }
-
-        // Zeta + Rho Multi
-        if (sec_type == "CMCF") {
+        // Zeta Multi
+        if (cap_type == "CMCF") {
             for (const int& l : customers) {
                 for (const int& i : dest_and_cust) {
-                    for (const int& j : dest_and_cust) {
+                    if (i == l) continue;
+                    for (const int& j : customers) {
                         if (i == j) continue;
                         const int idx = l * pow(no_cust_d, 2) + i * no_cust_d + j;
                         zeta_multi_indices.insert(idx);
+                    }
+                }
+            }
+        }
+
+        // Rho Multi
+        if (cap_type == "CMCF") {
+            for (const int& l : customers) {
+                for (const int& i : customers) {
+                    for (const int& j : dest_and_cust) {
+                        if (j == i || j == l) continue;
+                        const int idx = l * pow(no_cust_d, 2) + i * no_cust_d + j;
                         rho_multi_indices.insert(idx);
                     }
                 }
+            }
+        }
+        // ----------------------------- Time Variables -----------------------------
+        // Gamma_Capital
+        if (time_type == "TIME") {
+            for (const int& k : vehicles) {
+                Gamma_indices.insert(k);
             }
         }
 
@@ -115,19 +123,462 @@ private:
                 }
             }
         }
-
-        // Gamma_Capital
-        if (time_type == "TIME") {
-            for (const int& k : vehicles) {
-                Gamma_indices.insert(k);
-            }
-        }
-
-        // tau
-        for (const int& i : customers) {
-            tau_indices.insert(i);
-        }
     };
+
+    // Eliminate Variables
+    void preprocess() {
+        auto start = std::chrono::high_resolution_clock::now();
+        std::cout << "Eliminating Variables..." << std::endl;
+        std::unordered_set<int> tau_indices_removed;
+        std::unordered_set<int> gamma_indices_removed;
+        std::unordered_set<int> chi_indices_removed;
+        std::unordered_set<int> phi_indices_removed;
+        std::unordered_set<int> psi_indices_removed;
+        std::unordered_set<int> zeta_indices_removed;
+        std::unordered_set<int> zeta_multi_indices_removed;
+        std::unordered_set<int> rho_multi_indices_removed;
+        std::unordered_set<int> sigma_indices_removed;
+        std::unordered_set<int> omega_indices_removed;
+
+		// Keep track of percentage of eliminated variables
+        int tau_before = tau_indices.size();
+		int gamma_before = gamma_indices.size();
+		int chi_before = chi_indices.size();
+		int psi_before = psi_indices.size();
+		int phi_before = phi_indices.size();
+		int zeta_before = zeta_indices.size();
+		int zeta_multi_before = zeta_multi_indices.size();
+		int rho_multi_before = rho_multi_indices.size();
+		int sigma_before = sigma_indices.size();
+		int omega_before = omega_indices.size();
+
+        // Eliminate Variables
+        while (true) {
+            int total_removed = 0;
+            // ----------------------------- Main Variables -----------------------------
+            // Tau
+            for (const int& i : tau_indices) {
+                bool can_eliminate1 = true, can_eliminate2 = true;
+                if (main_type == "3I") {
+                    // 1.1
+                    for (const int& k : vehicles) {
+                        for (const int& j : dest_and_cust) {
+							int idx = k * no_cust_d_squared + i * no_cust_d + j;
+                            if (chi_indices.contains(idx)) {
+                                can_eliminate1 = false;
+                                break;
+                            }
+                        }
+						if (!can_eliminate1) break;
+                    }
+                    // 2.1
+                    for (const int& k : vehicles) {
+                        if (gamma_indices.contains(k * no_cust_d + i)) {
+                            can_eliminate2 = false;
+                            break;
+						}
+                        for (const int& j : customers) {
+                            int idx = k * no_cust_d_squared + j * no_cust_d + i;
+                            if (chi_indices.contains(idx)) {
+                                can_eliminate2 = false;
+                                break;
+                            }
+                        }
+                        if (!can_eliminate2) break;
+                    }
+                }
+                else {
+                    // 1.2
+                    for (const int& j : dest_and_cust) {
+                        int idx = i * no_cust_d + j;
+                        if (psi_indices.contains(idx)) {
+                            can_eliminate1 = false;
+                            break;
+                        }
+                    }
+                    // 2.2
+                    for (const int& k : vehicles) {
+                        if (gamma_indices.contains(k * no_cust_d + i)) {
+                            can_eliminate2 = false;
+                            break;
+                        }
+                    }
+                    for (const int& j : customers) {
+                        int idx = j * no_cust_d + i;
+                        if (chi_indices.contains(idx)) {
+                            can_eliminate2 = false;
+                            break;
+                        }
+                    }
+                }
+                if (can_eliminate1 || can_eliminate2) {
+                    tau_indices_removed.insert(i);
+                    total_removed++;
+				}
+            }
+            for (const int& i : tau_indices_removed) {
+                tau_indices.erase(i);
+			}
+            tau_indices_removed.clear();
+
+            // Gamma
+            for (const int& idx : gamma_indices) {
+                const int k = int(floor(idx / no_cust_d));
+                const int j = idx - k * no_cust_d;
+                bool can_eliminate = false;
+                // 1
+                if (j == 0 && veh_occ[k] == 0) can_eliminate = true;
+                // 2
+                else if (demand[j] > capacity[k] - veh_occ[k]) can_eliminate = true;
+                // 3
+                else if (std::min(veh_arr_time[k], cust_arr_time[j]) <
+                    veh_dist[k][j] + shortest_path_to_dest[j]) can_eliminate = true;
+                // 4
+                else if (!tau_indices.contains(j) && j > 0) can_eliminate = true;
+                
+                if (can_eliminate) {
+                    gamma_indices_removed.insert(idx);
+                    total_removed++;
+				}
+            }
+            for (const int& idx : gamma_indices_removed) {
+                gamma_indices.erase(idx);
+            }
+            gamma_indices_removed.clear();
+
+            // Chi
+            for (const int& idx : chi_indices) {
+                const int k = int(floor(idx / no_cust_d_squared));
+                const int i = int(floor((idx - k * no_cust_d_squared) / no_cust_d));
+                const int j = idx - k * no_cust_d_squared - i * no_cust_d;
+                bool can_eliminate = false;
+                // 1
+                if (demand[i] + demand[j] > capacity[k] - veh_occ[k]) can_eliminate = true;
+                // 2
+                else if (std::min(veh_arr_time[k], std::min(cust_arr_time[i], cust_arr_time[j])) <
+                    shortest_path_from_veh[k][i] + cust_dist[i][j] + shortest_path_to_dest[j]) can_eliminate = true;
+                // 3
+                else if (!tau_indices.contains(i) || (!tau_indices.contains(j) && j > 0)) can_eliminate = true;
+                if (can_eliminate) {
+                    chi_indices_removed.insert(idx);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : chi_indices_removed) {
+                chi_indices.erase(idx);
+            }
+            chi_indices_removed.clear();
+
+            // Psi
+            for (const int& idx : psi_indices) {
+                const int i = int(floor(idx / no_cust_d));
+                const int j = idx - i * no_cust_d;
+                bool can_eliminate = false;
+                // 1
+                if (demand[i] + demand[j] > max_cap) can_eliminate = true;
+                // 3
+                else if (!tau_indices.contains(i) || (!tau_indices.contains(j) && j > 0)) can_eliminate = true;
+                // 2
+                else {
+                    int min_time = std::min(cust_arr_time[i], cust_arr_time[j]);
+                    int max_time = 0;
+					int shortest_path_to_i = std::numeric_limits<int>::max();
+                    for (const int& k : vehicles) {
+						max_time = std::max(veh_arr_time[k], max_time);
+						shortest_path_to_i = std::min(shortest_path_to_i, shortest_path_from_veh[k][i]);
+                    }
+					min_time = std::min(min_time, max_time);
+                    if (min_time < shortest_path_to_i + cust_dist[i][j] + shortest_path_to_dest[j]) can_eliminate = true;
+                }
+                if (can_eliminate) {
+                    psi_indices_removed.insert(idx);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : psi_indices_removed) {
+                psi_indices.erase(idx);
+            }
+            psi_indices_removed.clear();
+
+            // ----------------------------- Capacity Variables -----------------------------
+            // Phi
+            for (const int& i : phi_indices) {
+                int can_eliminate = false;
+                // 1
+				if (!tau_indices.contains(i)) can_eliminate = true;
+                if (can_eliminate) {
+                    phi_indices_removed.insert(i);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : phi_indices_removed) {
+                phi_indices.erase(idx);
+            }
+            phi_indices_removed.clear();
+
+            // Zeta
+            for (const int& idx : zeta_indices) {
+                const int i = int(floor(idx / no_cust_d));
+                const int j = idx - i * no_cust_d;
+                bool can_eliminate = false;
+                // 1
+                if (max_cap - demand[i] - demand[j] <= 0) can_eliminate = true;
+                else {
+                    // 2.1
+                    if (main_type == "3I") {
+                        bool all_edges_eliminated = true;
+                        for (const int& k : vehicles) {
+                            int k_idx = k * no_cust_d_squared + i * no_cust_d + j;
+                            if (chi_indices.contains(k_idx)) {
+                                all_edges_eliminated = false;
+                                break;
+							}
+                        }
+                        if (all_edges_eliminated) can_eliminate = true;
+                    }
+                    // 2.2
+                    else {
+                        if (!psi_indices.contains(idx)) can_eliminate = true;
+                    }
+                }
+                if (can_eliminate) {
+                    zeta_indices_removed.insert(idx);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : zeta_indices_removed) {
+                zeta_indices.erase(idx);
+            }
+            zeta_indices_removed.clear();
+
+            // Zeta_Multi
+            for (const int& idx : zeta_multi_indices) {
+                const int l = int(floor(idx / no_cust_d_squared));
+                const int i = int(floor((idx - l * no_cust_d_squared) / no_cust_d));
+                const int j = idx - l * no_cust_d_squared - i * no_cust_d;
+                bool can_eliminate = false;
+                // i = d
+                if (i == 0) {
+                    // 1
+					if (!tau_indices.contains(l)) can_eliminate = true;
+                    // 2
+                    else {
+						bool all_edges_eliminated = true;
+                        for (const int& k : vehicles) {
+                            if (gamma_indices.contains(k * no_cust_d + j)) {
+                                all_edges_eliminated = false;
+                                break;
+                            }
+                        }
+						if (all_edges_eliminated) can_eliminate = true;
+                    }
+                }
+                else {
+                    // 1
+                    if (l !=j && demand[i] + demand[j] + demand[l] > max_cap) can_eliminate = true;
+                    else {
+                        // 2
+						bool all_edges_eliminated = true;
+                        for (const int& v : dest_and_cust) {
+                            if (v == i || v == l) continue;
+							int z_idx = l * no_cust_d_squared + v * no_cust_d + i;
+                            if (zeta_multi_indices.contains(z_idx)) {
+                                all_edges_eliminated = false;
+                                break;
+							}
+                        }
+						if (all_edges_eliminated) can_eliminate = true;
+                        // 3
+                        all_edges_eliminated = true;
+                        for (const int& v : customers) {
+                            if (v == l) continue;
+                            int r_idx = i * no_cust_d_squared + v * no_cust_d + l;
+                            if (rho_multi_indices.contains(r_idx)) {
+                                all_edges_eliminated = false;
+                                break;
+                            }
+                        }
+                        if (all_edges_eliminated) can_eliminate = true;
+                        // 4.1
+                        if (main_type == "3I") {
+                            bool all_edges_eliminated = true;
+                            for (const int& k : vehicles) {
+                                int k_idx = k * no_cust_d_squared + i * no_cust_d + j;
+                                if (chi_indices.contains(k_idx)) {
+                                    all_edges_eliminated = false;
+                                    break;
+                                }
+                            }
+                            if (all_edges_eliminated) can_eliminate = true;
+                        }
+                        // 4.2
+                        else {
+                            if (!psi_indices.contains(i * no_cust_d + j)) can_eliminate = true;
+                        }
+                    }
+                }
+
+                if (can_eliminate) {
+                    zeta_multi_indices_removed.insert(idx);
+                    total_removed++;
+				}
+            }
+            for (const int& idx : zeta_multi_indices_removed) {
+                zeta_multi_indices.erase(idx);
+            }
+            zeta_multi_indices_removed.clear();
+
+            // Rho_Multi
+            for (const int& idx : rho_multi_indices) {
+                const int l = int(floor(idx / no_cust_d_squared));
+                const int i = int(floor((idx - l * no_cust_d_squared) / no_cust_d));
+                const int j = idx - l * no_cust_d_squared - i * no_cust_d;
+                bool can_eliminate = false;
+                // 1
+                if (l != i && demand[i] + demand[j] + demand[l] > max_cap) can_eliminate = true;
+                else if (j > 0) {
+                    // 2
+                    bool all_edges_eliminated = true;
+                    for (const int& v : dest_and_cust) {
+                        if (v == j || v == l) continue;
+                        int r_idx = l * no_cust_d_squared + j * no_cust_d + v;
+                        if (rho_multi_indices.contains(r_idx)) {
+                            all_edges_eliminated = false;
+                            break;
+                        }
+                    }
+                    // 3
+                    bool all_edges_eliminated2 = true;
+                    for (const int& v : customers) {
+                        if (v == l || v == j) continue;
+                        int z_idx = j * no_cust_d_squared + v * no_cust_d + l;
+                        if (zeta_multi_indices.contains(z_idx)) {
+                            all_edges_eliminated2 = false;
+                            break;
+                        }
+                    }
+                    if (all_edges_eliminated || all_edges_eliminated2) {
+                        can_eliminate = true;
+                    }
+                }
+                else {
+                    // 4.1
+                    if (main_type == "3I") {
+                        bool all_edges_eliminated = true;
+                        for (const int& k : vehicles) {
+                            int k_idx = k * no_cust_d_squared + i * no_cust_d + j;
+                            if (chi_indices.contains(k_idx)) {
+                                all_edges_eliminated = false;
+                                break;
+                            }
+                        }
+                        if (all_edges_eliminated) can_eliminate = true;
+                    }
+                    // 4.2
+                    else {
+                        if (!psi_indices.contains(i * no_cust_d + j)) can_eliminate = true;
+                    }
+                }
+
+
+                if (can_eliminate) {
+                    rho_multi_indices_removed.insert(idx);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : rho_multi_indices_removed) {
+                rho_multi_indices.erase(idx);
+            }
+            rho_multi_indices_removed.clear();
+
+            // ----------------------------- Time Variables -----------------------------
+            // Sigma
+            for (const int& idx : sigma_indices) {
+                const int i = int(floor(idx / no_cust_d));
+                const int j = idx - i * no_cust_d;
+                bool can_eliminate = false;
+                // 1
+                int u_ij = 0;
+                int max_cust_time = std::max(cust_arr_time[i], cust_arr_time[j]);
+				int shortest_path_to_i = std::numeric_limits<int>::max();
+                for (const int& k : vehicles) {
+                    u_ij = std::max(u_ij, std::max(max_cust_time, veh_arr_time[k]) - cust_dist[i][j] - shortest_path_to_dest[j]);
+					shortest_path_to_i = std::min(shortest_path_to_i, shortest_path_from_veh[k][i]);
+				}
+                if (u_ij + shortest_path_to_i <= 0) can_eliminate = true;
+                // 2
+                else {
+                    // 2.1
+                    if (main_type == "3I") {
+						bool all_edges_eliminated = true;
+                        for (const int& k : vehicles) {
+                            int k_idx = k * no_cust_d_squared + i * no_cust_d + j;
+                            if (chi_indices.contains(k_idx)) {
+                                all_edges_eliminated = false;
+                                break;
+                            }
+						}
+						if (all_edges_eliminated) can_eliminate = true;
+                    }
+                    // 2.2
+                    else {
+						if (!psi_indices.contains(idx)) can_eliminate = true;
+                    }
+                }
+
+                if (can_eliminate) {
+                    sigma_indices_removed.insert(idx);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : sigma_indices_removed) {
+                sigma_indices.erase(idx);
+            }
+            sigma_indices_removed.clear();
+
+            // Omega
+            for (const int& idx : omega_indices) {
+                const int i = int(floor(idx / no_cust_d));
+                const int j = idx - i * no_cust_d;
+                bool can_eliminate = false;
+                // 1.1
+                if (main_type == "3I") {
+                    bool all_edges_eliminated = true;
+                    for (const int& k : vehicles) {
+                        int k_idx = k * no_cust_d_squared + i * no_cust_d + j;
+                        if (chi_indices.contains(k_idx)) {
+                            all_edges_eliminated = false;
+                            break;
+                        }
+                    }
+                    if (all_edges_eliminated) can_eliminate = true;
+                }
+                // 1.2
+                else {
+                    if (!psi_indices.contains(idx)) can_eliminate = true;
+                }
+                if (can_eliminate) {
+                    omega_indices_removed.insert(idx);
+                    total_removed++;
+                }
+            }
+            for (const int& idx : omega_indices_removed) {
+                omega_indices.erase(idx);
+            }
+            omega_indices_removed.clear();
+            if (total_removed == 0) break;
+            break;
+        }
+        if (tau_before > 0) std::cout << "Tau variables eliminated: " << std::fixed << std::setprecision(2) << (tau_before - tau_indices.size()) / float(tau_before) * 100 << "%" << std::endl;
+        if (gamma_before > 0) std::cout << "Gamma variables eliminated: " << std::fixed << std::setprecision(2) << (gamma_before - gamma_indices.size()) / float(gamma_before) * 100 << "%" << std::endl;
+        if (chi_before > 0) std::cout << "Chi variables eliminated: " << std::fixed << std::setprecision(2) << (chi_before - chi_indices.size()) / float(chi_before) * 100 << "%" << std::endl;
+        if (phi_before > 0) std::cout << "Phi variables eliminated: " << std::fixed << std::setprecision(2) << (psi_before - psi_indices.size()) / float(phi_before) * 100 << "%" << std::endl;
+        if (zeta_before > 0) std::cout << "Zeta variables eliminated: " << std::fixed << std::setprecision(2) << (zeta_before - zeta_indices.size()) / float(zeta_before) * 100 << "%" << std::endl;
+		if (zeta_multi_before > 0) std::cout << "Zeta Multi variables eliminated: " << std::fixed << std::setprecision(2) << (zeta_multi_before - zeta_multi_indices.size()) / float(zeta_multi_before) * 100 << "%" << std::endl;
+		if (rho_multi_before > 0) std::cout << "Rho Multi variables eliminated: " << std::fixed << std::setprecision(2) << (rho_multi_before - rho_multi_indices.size()) / float(rho_multi_before) * 100 << "%" << std::endl;
+		if (sigma_before > 0) std::cout << "Sigma variables eliminated: " << std::fixed << std::setprecision(2) << (sigma_before - sigma_indices.size()) / float(sigma_before) * 100 << "%" << std::endl;
+		if (omega_before > 0) std::cout << "Omega variables eliminated: " << std::fixed << std::setprecision(2) << (omega_before - omega_indices.size()) / float(omega_before) * 100 << "%" << std::endl;
+    }
 
     void preprocess_main(std::unordered_set<int>& gamma_indices_removed, std::unordered_set<int>& chi_indices_removed,
         std::unordered_set<int>& phi_indices_removed, std::unordered_set<int>& xi_indices_removed, std::unordered_set<int>& psi_indices_removed, std::unordered_set<int>& zeta_indices_removed,
@@ -198,7 +649,7 @@ private:
             }
         }
 
-        if (sec_type == "DL") {
+        if (cap_type == "DL") {
             for (const int& i : customers) {
                 if (max_cap - demand[i] <= 0) phi_indices_removed.insert(i);
                 else {
@@ -214,7 +665,7 @@ private:
                 }
             }
         }
-        else if (sec_type == "COCF") {
+        else if (cap_type == "COCF") {
             for (const int& i : customers) {
                 // Remove Zeta Variables
                 for (const int& j : dest_and_cust) {
@@ -246,7 +697,7 @@ private:
                 }
             }
         }
-        else if (sec_type == "CMCF") {
+        else if (cap_type == "CMCF" || cap_type == "CMCF2") {
             // Remove Flow Variables
             for (const int& i : dest_and_cust) {
                 for (const int& j : dest_and_cust) {
@@ -531,14 +982,19 @@ private:
 
     // Construct the variables of the model
     void construct_variables(const char& vtype) {
-        const int no_cust_d_squared = int(pow(no_cust_d, 2));
+        // ----------------------------- Main Variables -----------------------------
+        // Tau
+        for (const int& idx : tau_indices) {
+            const std::string name = "tau[" + itos(idx) + "]";
+            tau[idx] = model->addVar(0, 1, profit[idx], GRB_CONTINUOUS, name);
+        }
+
         // Gamma
         for (const int& idx : gamma_indices) {
             const int k = int(floor(idx / no_cust_d));
             const int j = idx - k * no_cust_d;
             const std::string name = "gamma[" + itos(k) + "][" + itos(j) + "]";
-            if (main_type == "2I") gamma[idx] = model->addVar(0.0, 1.0, veh_dist[k][j], vtype, name);
-            else gamma[idx] = model->addVar(0.0, 1.0, -veh_dist[k][j], vtype, name);
+            gamma[idx] = model->addVar(0.0, GRB_INFINITY, -veh_dist[k][j], vtype, name);
         }
 
         // Chi
@@ -547,23 +1003,7 @@ private:
             const int i = int(floor((idx - k * no_cust_d_squared) / no_cust_d));
             const int j = idx - k * no_cust_d_squared - i * no_cust_d;
             const std::string name = "chi[" + itos(i) + "][" + itos(j) + "][" + itos(k) + "]";
-            const int obj = -cust_dist[i][j]; // Change to penalty
-            if (main_type == "LB") chi[idx]= model->addVar(0.0, 1.0, 0, GRB_CONTINUOUS, name);
-            else chi[idx] = model->addVar(0.0, 1.0, obj, vtype, name);
-        }
-
-        // Phi
-        for (const int& idx : phi_indices) {
-            name = "phi[" + itos(idx) + "]";
-            phi[idx] = model->addVar(0, max_cap - demand[idx], 0, GRB_CONTINUOUS, name);
-        }
-
-        // Xi
-        for (const int& idx : xi_indices) {
-            const int k = int(floor(idx / no_cust_d));
-            const int j = idx - k * no_cust_d;
-            const std::string name = "xi[" + itos(k) + "][" + itos(j) + "]";
-            xi[idx] = model->addVar(0.0, 1.0, - demand[j] * cust_dist[j][0], vtype, name); // Change to Penalty
+            chi[idx] = model->addVar(0.0, 1.0, -cust_dist[i][j], vtype, name);
         }
 
         // Psi
@@ -571,8 +1011,13 @@ private:
             const int i = int(floor(idx / no_cust_d));
             const int j = idx - i * no_cust_d;
             const std::string name = "psi[" + itos(i) + "][" + itos(j) + "]";
-            double obj = -cust_dist[i][j];
-            psi[idx] = model->addVar(0.0, 1.0, obj, vtype, name);
+            psi[idx] = model->addVar(0.0, 1.0, -cust_dist[i][j], vtype, name);
+        }
+        // ----------------------------- Capacity Variables -----------------------------
+        // Phi
+        for (const int& idx : phi_indices) {
+            name = "phi[" + itos(idx) + "]";
+            phi[idx] = model->addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
         }
 
         // Zeta
@@ -580,23 +1025,7 @@ private:
             const int i = int(floor(idx / no_cust_d));
             const int j = idx - i * no_cust_d;
             const std::string name = "zeta[" + itos(i) + "][" + itos(j) + "]";
-            zeta[idx] = model->addVar(0.0, max_cap - demand[i], 0, GRB_CONTINUOUS, name);
-        }
-
-        // Rho
-        for (const int& idx : rho_indices) {
-            const int i = int(floor(idx / no_cust_d));
-            const int j = idx - i * no_cust_d;
-            const std::string name = "rho[" + itos(i) + "][" + itos(j) + "]";
-            rho[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
-        }
-
-        // Rho_veh
-        for (const int& idx : rho_veh_indices) {
-            const int k = int(floor(idx / no_cust_d));
-            const int j = idx - k * no_cust_d;
-            const std::string name = "rho_veh[" + itos(k) + "][" + itos(j) + "]";
-            rho_veh[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
+            zeta[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
         }
         
         // Zeta_Multi
@@ -605,7 +1034,7 @@ private:
             const int i = int(floor((idx - l * no_cust_d_squared) / no_cust_d));
             const int j = idx - l * no_cust_d_squared - i * no_cust_d;
             const std::string name = "zeta_multi[" + itos(l) + "][" + itos(i) + "][" + itos(j) + "]";
-            zeta_multi[idx] = model->addVar(0.0, 1.0, 0, GRB_CONTINUOUS, name);
+            zeta_multi[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
         }
 
         // Rho_Multi
@@ -614,7 +1043,13 @@ private:
             const int i = int(floor((idx - l * no_cust_d_squared) / no_cust_d));
             const int j = idx - l * no_cust_d_squared - i * no_cust_d;
             const std::string name = "rho_multi[" + itos(l) + "][" + itos(i) + "][" + itos(j) + "]";
-            rho_multi[idx] = model->addVar(0.0, 1.0, 0, GRB_CONTINUOUS, name);
+            rho_multi[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
+        }
+        // ----------------------------- Time Variables -----------------------------
+        // Gamma_Capital
+        for (const int& idx : Gamma_indices) {
+            const std::string name = "Gamma[" + itos(idx) + "]";
+            Gamma[idx] = model->addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
         }
 
         // Sigma
@@ -633,25 +1068,13 @@ private:
             const std::string name = "omega[" + itos(i) + "][" + itos(j) + "]";
             omega[idx] = model->addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
         }
-
-        // T
-        for (const int& idx : Gamma_indices) {
-            const std::string name = "T[" + itos(idx) + "]";
-            Gamma[idx] = model->addVar(0, veh_arr_time[idx], 0, GRB_CONTINUOUS, name);
-        }
-
-        // Tau
-        for (const int& idx : tau_indices) {
-            const std::string name = "tau[" + itos(idx) + "]";
-            tau[idx] = model->addVar(0, 1, demand[idx] * cust_dist[idx][0], GRB_CONTINUOUS, name);
-        }
     }
 
     // Adds Constraint to the model
     void add_constraints() {
         GRBLinExpr lexpr, lexpr2, lexpr3, lexpr4;
-        const int no_cust_d_squared = int(pow(no_cust_d, 2));
 
+        // Main Constraints
         if (main_type == "3I") {
             for (const int& k : vehicles) {
                 for (const int& j : dest_and_cust) {
@@ -770,14 +1193,14 @@ private:
                     if (psi_indices.find(idx) != psi_indices.end()) lexpr2 += psi[idx];
                 }
                 model->addConstr(lexpr == tau[i]);
-
                 lexpr.clear();
                 lexpr2.clear();
             }
 
         }
 
-        if (sec_type == "DL") {
+        // Capacity Constraints
+        if (cap_type == "DL") {
             for (const int& i : customers) {
                 if (phi_indices.find(i) == phi_indices.end()) continue;
                 for (const int& k : vehicles) {
@@ -835,7 +1258,7 @@ private:
 
             }
         }
-        if (sec_type == "COCF") {
+        else if (cap_type == "COCF") {
             for (const int& i : customers) {
                 for (const int& k : vehicles) {
                     int idx = k * no_cust_d + i;
@@ -949,7 +1372,7 @@ private:
                 lexpr.clear();
             }
         }
-        if (sec_type == "CMCF") {
+        else if (cap_type == "CMCF") {
             std::vector<std::vector<GRBLinExpr>> zeta_out(no_cust_d);
             std::vector<std::vector<GRBLinExpr>> zeta_in(no_cust_d);
             std::vector<std::vector<GRBLinExpr>> rho_out(no_cust_d);
@@ -960,117 +1383,64 @@ private:
                 zeta_in[l].resize(no_cust_d);
                 rho_out[l].resize(no_cust_d);
                 rho_in[l].resize(no_cust_d);
-                for (const int& i : dest_and_cust) {
-                    for (const int& j : dest_and_cust) {
-                        if (i == j) continue;
-                        const int idx = l * pow(no_cust_d, 2) + i * no_cust_d + j;
-                        if (zeta_multi_indices.find(idx) != zeta_multi_indices.end()) {
-                            zeta_out[l][i] += zeta_multi[idx];
-                            zeta_in[l][j] += zeta_multi[idx];
-                        }
-                        if (rho_multi_indices.find(idx) != rho_multi_indices.end()) {
-                            rho_out[l][i] += rho_multi[idx];
-                            rho_in[l][j] += rho_multi[idx];
-                        }
-                    }
-                }
             }
+            for (const int& idx : zeta_multi_indices) {
+                const int l = int(floor(idx / no_cust_d_squared));
+                const int i = int(floor((idx - l * no_cust_d_squared) / no_cust_d));
+                const int j = idx - l * no_cust_d_squared - i * no_cust_d;
+				zeta_out[l][i] += zeta_multi[idx];
+				zeta_in[l][j] += zeta_multi[idx];
+            }
+            for (const int& idx : rho_multi_indices) {
+                const int l = int(floor(idx / no_cust_d_squared));
+                const int i = int(floor((idx - l * no_cust_d_squared) / no_cust_d));
+                const int j = idx - l * no_cust_d_squared - i * no_cust_d;
+                rho_out[l][i] += rho_multi[idx];
+                rho_in[l][j] += rho_multi[idx];
+            }
+
             for (const int& l : customers) {
-                if (main_type == "2I") {
-                    for (int j : dest_and_cust) {
-                        if (l == j) continue;
-                        const int idx = l * no_cust_d + j;
-                        if (psi_indices.find(idx) != psi_indices.end()) lexpr += psi[idx];
-                    }
-                }
-                else {
-                    for (const int& k : vehicles) {
-                        for (int j : dest_and_cust) {
-                            if (l == j) continue;
-                            const int idx = k * no_cust_d_squared + l * no_cust_d + j;
-                            if (chi_indices.find(idx) != chi_indices.end()) lexpr += chi[idx];
-                        }
-                    }
-                }
+				if (tau_indices.contains(l)) lexpr += tau[l];
                 // Zeta
-                model->addConstr(zeta_out[l][0] == lexpr);
-				for (const int& i : customers) {
-                    if (i == l) {
-                        model->addConstr(zeta_in[l][i] == zeta_out[l][i] + lexpr);
-                    }
-                    else {
-						model->addConstr(zeta_in[l][i] == zeta_out[l][i]);
-                    }
-				}
+                model->addConstr(zeta_out[l][0] == lexpr); // CMCF.1
+                model->addConstr(zeta_in[l][l] == lexpr); // CMCF.2
+	            for (const int& i : customers) {
+                    if (i == l) continue;
+			        model->addConstr(zeta_in[l][i] == zeta_out[l][i]); // CMCF.3
+	            }
                 // Rho
-                model->addConstr(rho_in[l][0] == lexpr);
+                model->addConstr(rho_in[l][0] == lexpr); // CMCF.4
+                model->addConstr(rho_out[l][l] == lexpr); // CMCF.5
                 for (const int& i : customers) {
-                    if (i == l) {
-                        model->addConstr(rho_in[l][i] == rho_out[l][i] - lexpr);
-                    }
-                    else {
-                        model->addConstr(rho_in[l][i] == rho_out[l][i]);
-                    }
+                    if (i == l) continue;
+                    model->addConstr(rho_in[l][i] == rho_out[l][i]); // CMCF.6
                 }
-				for (const int& i : customers) {
-					if (i == l) continue;
-					model->addConstr(zeta_in[l][i] == rho_in[i][l]);
-				}
+                // CMCF.7
+	            for (const int& i : customers) {
+		            if (i == l) continue;
+		            model->addConstr(zeta_in[l][i] == rho_in[i][l]);
+	            }
                 lexpr.clear();
             }
-            //for (const int& i : customers) {
-            //    if (main_type == "2I") {
-            //        for (int j : dest_and_cust) {
-            //            if (i == j) continue;
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) lexpr += psi[idx];
-            //        }
-            //    }
-            //    else {
-            //        for (const int& k : vehicles) {
-            //            for (int j : dest_and_cust) {
-            //                if (i == j) continue;
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) lexpr += chi[idx];
-            //            }
-            //        }
-            //    }
-            //    model->addConstr(zeta_out[i][0] == lexpr);
-            //    model->addConstr(zeta_in[i][i] == lexpr);
-            //    model->addConstr(rho_out[i][i] == lexpr);
-            //    model->addConstr(rho_in[i][0] == lexpr);
-            //    lexpr.clear();
-            //    if (!preprocessed) {
-            //        model->addConstr(zeta_in[i][0] == 0);
-            //        model->addConstr(zeta_out[i][i] == 0);
-            //        model->addConstr(rho_in[i][i] == 0);
-            //        model->addConstr(rho_out[i][0] == 0);
-            //    }
-            //    for (const int& j : customers) {
-            //        if (i == j) continue;
-            //        model->addConstr(zeta_out[i][j] == zeta_in[i][j]);
-            //        model->addConstr(zeta_in[i][j] == rho_out[j][i]);
-            //        model->addConstr(rho_out[j][i] == rho_in[j][i]);
-            //    }
-            //}
 
+            // CMCF.8-11
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     if (main_type == "2I") {
                         const int psi_idx = i * no_cust_d + j;
-                        if (psi_indices.find(psi_idx) != psi_indices.end()) lexpr += psi[psi_idx];
+                        if (psi_indices.contains(psi_idx)) lexpr += psi[psi_idx];
                     }
                     else {
                         for (const int& k : vehicles) {
                             const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-                            if (chi_indices.find(idx) != chi_indices.end()) lexpr += chi[idx];
+                            if (chi_indices.contains(idx)) lexpr += chi[idx];
                         }
                     }
                     for (const int& l : customers) {
                         const int idx = l * no_cust_d_squared + i * no_cust_d + j;
-                        if (zeta_multi_indices.find(idx) != zeta_multi_indices.end()) lexpr2 += zeta_multi[idx];
-                        if (rho_multi_indices.find(idx) != rho_multi_indices.end()) lexpr2 += rho_multi[idx];
+                        if (zeta_multi_indices.contains(idx)) lexpr2 += zeta_multi[idx];
+                        if (rho_multi_indices.contains(idx)) lexpr2 += rho_multi[idx];
                         if (lexpr2.size() > 0) model->addConstr(lexpr2 <= lexpr);
                         lexpr2.clear();
                     }
@@ -1078,64 +1448,63 @@ private:
                 }
             }
 
-            for (const int& j : dest_and_cust) {
+            // CMCF.12
+            for (const int& i : customers) {
                 for (const int& k : vehicles) {
-                    const int idx = k * no_cust_d + j;
-                    if (gamma_indices.find(idx) != gamma_indices.end()) lexpr += gamma[idx];
+                    const int idx = k * no_cust_d + i;
+                    if (gamma_indices.contains(idx)) lexpr += gamma[idx];
                 }
                 for (const int& l : customers) {
-                    const int idx = l * no_cust_d_squared + 0 * no_cust_d + j;
-                    if (zeta_multi_indices.find(idx) != zeta_multi_indices.end()) lexpr2 += zeta_multi[idx];
-                    if (rho_multi_indices.find(idx) != rho_multi_indices.end()) lexpr2 += rho_multi[idx];
+                    const int idx = l * no_cust_d_squared + 0 * no_cust_d + i;
+                    if (zeta_multi_indices.contains(idx)) lexpr2 += zeta_multi[idx];
                     if (lexpr2.size() > 0) model->addConstr(lexpr2 <= lexpr);
                     lexpr2.clear();
                 }
                 lexpr.clear();
             }
-
+            // CMCF.13-14
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     if (main_type == "2I") {
                         const int psi_idx = i * no_cust_d + j;
-                        if (psi_indices.find(psi_idx) != psi_indices.end()) lexpr += (max_cap - demand[i] - demand[j]) * psi[psi_idx];
+                        if (psi_indices.contains(psi_idx)) lexpr += (max_cap - demand[i] - demand[j]) * psi[psi_idx];
                     }
                     else {
                         for (const int& k : vehicles) {
                             const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-                            if (chi_indices.find(idx) != chi_indices.end()) lexpr += (capacity[k] - veh_occ[k] - demand[i] - demand[j]) * chi[idx];
+                            if (chi_indices.contains(idx)) lexpr += (capacity[k] - veh_occ[k] - demand[i] - demand[j]) * chi[idx];
                         }
                     }
                     for (const int& l : customers) {
                         if (l == i || l == j) continue;
                         const int idx = l * no_cust_d_squared + i * no_cust_d + j;
-                        if (zeta_multi_indices.find(idx) != zeta_multi_indices.end()) lexpr2 += demand[l] * zeta_multi[idx];
-                        if (rho_multi_indices.find(idx) != rho_multi_indices.end()) lexpr2 += demand[l] * rho_multi[idx];
+                        if (zeta_multi_indices.contains(idx)) lexpr2 += demand[l] * zeta_multi[idx];
+                        if (rho_multi_indices.contains(idx)) lexpr2 += demand[l] * rho_multi[idx];
                     }
                     model->addConstr(lexpr2 <= lexpr);
                     lexpr.clear();
                     lexpr2.clear();
                 }
             }
-
-            for (const int& j : dest_and_cust) {
+            // CMCF.15
+            for (const int& i : customers) {
                 for (const int& k : vehicles) {
-                    const int idx = k * no_cust_d + j;
-                    if (gamma_indices.find(idx) != gamma_indices.end()) lexpr += (capacity[k] - veh_occ[k] - demand[j]) * gamma[idx];
+                    const int idx = k * no_cust_d + i;
+                    if (gamma_indices.contains(idx)) lexpr += (capacity[k] - veh_occ[k] - demand[i]) * gamma[idx];
                 }
                 for (const int& l : customers) {
-                    if (l == j) continue;
-                    const int idx = l * no_cust_d_squared + 0 * no_cust_d + j;
-                    if (zeta_multi_indices.find(idx) != zeta_multi_indices.end()) lexpr2 += demand[l] * zeta_multi[idx];
-                    if (rho_multi_indices.find(idx) != rho_multi_indices.end()) lexpr2 += demand[l] * rho_multi[idx];
+                    if (l == i) continue;
+                    const int idx = l * no_cust_d_squared + 0 * no_cust_d + i;
+                    if (zeta_multi_indices.contains(idx)) lexpr2 += demand[l] * zeta_multi[idx];
                 }
                 model->addConstr(lexpr2 <= lexpr);
                 lexpr.clear();
                 lexpr2.clear();
             }
-
         }
 
+        // Time Constraints
         if (time_type == "TIME") {
             for (const int& k : vehicles) {
                 for (const int& j : dest_and_cust) {
@@ -1201,316 +1570,6 @@ private:
             //    lexpr2.clear();
             //}
         }
-        else if (time_type == "TOCF") {
-            // Determine bounds
-            std::vector<std::vector<std::vector<int>>> L(no_veh);
-            std::vector<std::vector<std::vector<int>>> U(no_veh);
-            for (const int& k : vehicles) {
-                L[k].resize(no_cust_d);
-                U[k].resize(no_cust_d);
-                for (const int& i : customers) {
-                    L[k][i].resize(no_cust_d);
-                    U[k][i].resize(no_cust_d);
-                    for (const int& j : dest_and_cust) {
-                        if (i == j) continue;
-                        int l_min = std::numeric_limits<int>::max();
-                        int u_min = std::numeric_limits<int>::max();
-                        for (const int& l : customers) {
-                            if (l == i || l == j) continue;
-                            l_min = std::min(l_min, cust_dist[j][l]);// +veh_dist[k][l]);
-                            u_min = std::min(u_min, cust_dist[l][i]);// +cust_dist[l][0]);
-                        }
-                        if (j == 0) {
-                            L[k][i][j] = cust_dist[i][j];
-                        }
-                        else {
-                            L[k][i][j] = cust_dist[i][j] + std::min(cust_dist[j][0], l_min);
-                        }
-                        U[k][i][j] = std::min(std::min(cust_arr_time[i], cust_arr_time[j]), veh_arr_time[k])
-                            - std::min(veh_dist[k][i], u_min);
-                    }
-                }
-            }
-            // TOCF2.1
-            for (const int& i : customers) {
-                // First term
-                for (const int& k : vehicles) {
-                    const int idx = k * no_cust_d + i;
-                    if (rho_veh_indices.find(idx) != rho_veh_indices.end()) lexpr += rho_veh[idx];
-                }
-                //Second term
-                for (const int& j : customers) {
-					if (i == j) continue;
-					const int idx = j * no_cust_d + i;
-					if (rho_indices.find(idx) != rho_indices.end()) lexpr2 += rho[idx];
-					for (const int& k : vehicles) {
-						const int chi_idx = k * no_cust_d_squared + j * no_cust_d + i;
-						if (chi_indices.find(chi_idx) != chi_indices.end()) lexpr2 += L[k][j][i] * chi[chi_idx];
-					}
-                }
-				// Third term
-                for (const int& j : customers) {
-                    if (i == j) continue;
-                    const int idx = i * no_cust_d + j;
-                    if (rho_indices.find(idx) != rho_indices.end()) lexpr3 += rho[idx];
-                    for (const int& k : vehicles) {
-                        const int chi_idx = k * no_cust_d_squared + i * no_cust_d + j;
-                        if (chi_indices.find(chi_idx) != chi_indices.end()) lexpr3 += L[k][i][j] * chi[chi_idx];
-                    }
-                }
-                // Fourth term
-                for (const int& k : vehicles) {
-                    for (const int& j : customers) {
-                        if (i == j) continue;
-						const int idx = k * no_cust_d_squared + j * no_cust_d + i;
-                        if (chi_indices.find(idx) != chi_indices.end()) lexpr4 += cust_dist[j][i] * chi[idx];
-                    }
-                    const int veh_idx = k * no_cust_d + i;
-                    if (gamma_indices.find(veh_idx) != gamma_indices.end()) {
-                        lexpr4 += veh_dist[k][i] * gamma[veh_idx];
-                    }
-                }
-                model->addConstr(lexpr + lexpr2 == lexpr3 + lexpr4);
-                lexpr.clear();
-                lexpr2.clear();
-                lexpr3.clear();
-                lexpr4.clear();
-            }
-
-			// TOCF2.2
-            for (const int& i : customers) {
-                for (const int& j : dest_and_cust) {
-                    if (i == j) continue;
-					const int idx = i * no_cust_d + j;
-                    if (rho_indices.find(idx) == rho_indices.end()) continue;
-					for (const int& k : vehicles) {
-						const int chi_idx = k * no_cust_d_squared + i * no_cust_d + j;
-                        if (chi_indices.find(chi_idx) != chi_indices.end()) {
-                            lexpr += (U[k][i][j] - L[k][i][j]) * chi[chi_idx];
-                        }
-					}
-                    model->addConstr(rho[idx] <= lexpr);
-                    lexpr.clear();
-                }
-            }
-            // TOCF.4
-            for (const int& k : vehicles) {
-                for (const int& i : customers) {
-					const int idx = k * no_cust_d + i;
-					if (rho_veh_indices.find(idx) == rho_veh_indices.end()) continue;
-                    if (gamma_indices.find(idx) != gamma_indices.end()) {
-                        lexpr += std::min(veh_arr_time[k], cust_arr_time[k]) * gamma[idx];
-                    }
-					model->addConstr(rho_veh[idx] <= lexpr);
-                    lexpr.clear();
-                }
-            }
-            // TOCF.5
-            //for (const int& k : vehicles) {
-            //    for (const int& i : customers) {
-            //        const int idx = k * no_cust_d + i;
-            //        if (rho_veh_indices.find(idx) != rho_veh_indices.end()) lexpr2 += rho_veh[idx];
-            //        for (const int& j : customers) {
-            //            if (i == j) continue;
-            //            for (const int& l : dest_and_cust) {
-            //                if (j == l) continue;
-            //                const int idx = k * no_cust_d_squared + j * no_cust_d + l;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    lexpr += chi[idx];
-            //                }
-            //            }
-            //            GRBLinExpr RHS = cust_arr_time[j] * lexpr;
-            //            +std::min(veh_arr_time[k], cust_arr_time[i]) * (1 - lexpr);
-            //            model->addConstr(lexpr2 <= RHS);
-            //            lexpr.clear();
-            //            lexpr2.clear();
-            //        }
-            //    }
-            //}
-            // TOCF.5 - sum i
-            int max_cust_arr_time = 0;
-            for (const int& i : customers) max_cust_arr_time = std::max(max_cust_arr_time, cust_arr_time[i]);
-            for (const int& k : vehicles) {
-                for (const int& i : customers) {
-                    const int idx = k * no_cust_d + i;
-                    if (rho_veh_indices.find(idx) != rho_veh_indices.end()) lexpr2 += rho_veh[idx];
-                }
-                for (const int& j : customers) {
-                    for (const int& l : dest_and_cust) {
-						if (j == l) continue;
-						const int idx = k * no_cust_d_squared + j * no_cust_d + l;
-						if (chi_indices.find(idx) != chi_indices.end()) {
-							lexpr += chi[idx];
-						}
-                    }
-                    GRBLinExpr RHS = cust_arr_time[j] * lexpr
-                        + std::min(veh_arr_time[k], max_cust_arr_time) * (1 - lexpr);
-                    model->addConstr(lexpr2 <= RHS);
-                    lexpr.clear();
-                    lexpr2.clear();
-                }
-            }
-            //// TOCF.5 - Sum k
-            //int max_veh_arr_time = 0;
-            //for (const int& k : vehicles) max_veh_arr_time = std::max(max_veh_arr_time, veh_arr_time[k]);
-            //for (const int& i : customers) {
-            //    for (const int& k : vehicles) {
-            //        const int idx = k * no_cust_d + i;
-            //        if (rho_veh_indices.find(idx) != rho_veh_indices.end()) lexpr2 += rho_veh[idx];
-            //    }
-            //    for (const int& j : customers) {
-            //        if (i == j) continue;
-            //        if (tau_indices.find(j) != tau_indices.end()) {
-            //            lexpr += tau[j];
-            //        }
-            //        GRBLinExpr RHS = cust_arr_time[j] * lexpr
-            //            + std::min(max_veh_arr_time, cust_arr_time[i]) * (1 - lexpr);
-            //        model->addConstr(lexpr2 <= RHS);
-            //        lexpr.clear();
-            //        lexpr2.clear();
-            //    }
-            //}
-            //for (const int& k : vehicles) {
-            //    for (const int& i : customers) {
-            //        const int idx = k * no_cust_d + i;
-            //        if (rho_veh_indices.find(idx) == rho_veh_indices.end()) continue;
-            //        if (gamma_indices.find(idx) != gamma_indices.end()) lexpr += gamma[idx];
-            //        
-            //        const int min_time = std::min(veh_arr_time[k], cust_arr_time[i]);
-            //        // TOCF.4
-            //        model->addConstr(rho_veh[idx] <= min_time * lexpr);
-            //        lexpr.clear();
-            //        for (const int& j : customers) {
-            //            if (i == j) continue;
-            //            if (cust_arr_time[j] >= min_time) continue;
-            //            for (const int& l : dest_and_cust) {
-            //                if (l == j) continue;
-            //                const int idx = k * no_cust_d_squared + j * no_cust_d + l;
-            //                if (chi_indices.find(idx) != chi_indices.end()) lexpr += chi[idx];
-            //            }
-            //            // TOCF.5
-            //            model->addConstr(rho_veh[idx] <= cust_arr_time[j] * lexpr + min_time * (1 - lexpr));
-            //            lexpr.clear();
-            //        }
-            //    }
-            //}
-            //for (const int& i : customers) {
-            //    // First term
-            //    for (const int& k : vehicles) {
-            //        const int idx = k * no_cust_d + i;
-            //        if (rho_veh_indices.find(idx) != rho_veh_indices.end()) lexpr += rho_veh[idx];
-            //        if (gamma_indices.find(idx) != gamma_indices.end()) lexpr -= veh_dist[k][i] * gamma[idx];
-            //    }
-            //    // Second Term
-            //    for (const int& j : customers) {
-            //        if (i == j) continue;
-            //        const int idx = j * no_cust_d + i;
-            //        if (rho_indices.find(idx) != rho_indices.end()) lexpr2 += rho[idx];
-            //        int min_dist = cust_dist[i][0];
-            //        for (const int& l : customers) {
-            //            if (l == i || l == j) continue;
-            //            min_dist = std::min(min_dist, cust_dist[i][l]);
-            //        }
-            //        if (main_type == "2I") {
-            //            const int idx = j * no_cust_d + i;
-            //            if (psi_indices.find(idx) != psi_indices.end()) {
-            //                lexpr2 += min_dist * psi[idx];
-            //            }
-            //        }
-            //        else {
-            //            for (const int& k : vehicles) {
-            //                const int idx = k * no_cust_d_squared + j * no_cust_d + i;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    lexpr2 += min_dist * chi[idx];
-            //                }
-            //            }
-            //        }
-            //    }
-            //    // Third Term
-            //    for (const int& j : dest_and_cust) {
-            //        if (i == j) continue;
-            //        const int idx = i * no_cust_d + j;
-            //        if (rho_indices.find(idx) != rho_indices.end()) lexpr3 += rho[idx];
-            //        int min_dist = cust_dist[j][0];
-            //        for (const int& l : customers) {
-            //            if (l == i || l == j) continue;
-            //            min_dist = std::min(min_dist, cust_dist[j][l]);
-            //        }
-            //        if (main_type == "2I") {
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) {
-            //                lexpr3 += min_dist * psi[idx];
-            //            }
-            //        }
-            //        else {
-            //            for (const int& k : vehicles) {
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    lexpr3 += min_dist * chi[idx];
-            //                }
-            //            }
-            //        }
-            //    }
-            //    //Fourth Term
-            //    if (main_type == "2I") {
-            //        for (const int& j : dest_and_cust) {
-            //            if (i == j) continue;
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) lexpr4 += cust_dist[i][j] * psi[idx];
-            //        }
-            //    }
-            //    else {
-            //        for (const int& k : vehicles) {
-            //            for (const int& j : dest_and_cust) {
-            //                if (i == j) continue;
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) lexpr4 += cust_dist[i][j] * chi[idx];
-            //            }
-            //        }
-            //    }
-            //    // TOCF2.1
-            //    model->addConstr(lexpr + lexpr2 == lexpr3 + lexpr4);
-            //    lexpr.clear();
-            //    lexpr2.clear();
-            //    lexpr3.clear();
-            //    lexpr4.clear();
-            //}
-
-            //for (const int& i : customers) {
-            //    for (const int& j : customers) {
-            //        if (i == j) continue;
-            //        int min_dist = cust_dist[j][0];
-            //        for (const int& l : customers) {
-            //            if (l == i || l == j) continue;
-            //            min_dist = std::min(min_dist, cust_dist[j][l]);
-            //        }
-            //        const int rho_idx = i * no_cust_d + j;
-            //        if (rho_indices.find(rho_idx) == rho_indices.end()) continue;
-            //        const int min_time = std::min(cust_arr_time[i], cust_arr_time[j]);
-            //        if (main_type == "2I") {
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) {
-            //                //lexpr += psi[idx];
-            //                lexpr2 += (min_time - cust_dist[i][j] - min_dist) * psi[idx];
-            //            }
-            //        }
-            //        else {
-            //            for (const int& k : vehicles) {
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    //lexpr += chi[idx];
-            //                    lexpr2 += (min_time - cust_dist[i][j] - min_dist) * chi[idx];
-            //                }
-            //            }
-            //        }
-            //        // TOCF2.2
-            //        //model->addConstr(min_dist * lexpr <= rho[rho_idx]);
-            //        model->addConstr(rho[rho_idx] <= lexpr2);
-            //        lexpr.clear();
-            //        lexpr2.clear();
-            //    }
-            //}
-        }
         else if (time_type == "TTCF") {
             // Determine bounds
             std::vector<std::vector<std::vector<int>>> L(no_veh);
@@ -1536,20 +1595,19 @@ private:
 					}
 				}
 			}
-            // Time flow - TTCF2.1
+            // Time flow - TTCF.1
             for (const int& i : customers) {
                 // First term
                 for (const int& j : customers) {
                     if (i == j) continue;
                     const int idx = j * no_cust_d + i;
-                    if (sigma_indices.find(idx) != sigma_indices.end()) lexpr += sigma[idx];
+                    if (sigma_indices.contains(idx)) lexpr += sigma[idx];
                     if (main_type == "2I") {
-                        const int idx = j * no_cust_d + i;
-						int k_min_l = std::numeric_limits<int>::max();
-						for (const int& k : vehicles) {
-							k_min_l = std::min(k_min_l, L[k][j][i]);
-						}
-                        if (psi_indices.find(idx) != psi_indices.end()) {
+                        if (psi_indices.contains(idx)) {
+                            int k_min_l = std::numeric_limits<int>::max();
+                            for (const int& k : vehicles) {
+                                k_min_l = std::min(k_min_l, L[k][j][i]);
+                            }
                             lexpr += k_min_l * psi[idx];
                         }
                     }
@@ -1563,13 +1621,13 @@ private:
                     }
                 }
                 // Second term
-                if (main_type == "2I") {
-                    for (const int& k : vehicles) {
-                        int veh_idx = k * no_cust_d + i;
-                        if (gamma_indices.find(veh_idx) != gamma_indices.end()) {
-                            lexpr2 += veh_dist[k][i] * gamma[veh_idx];
-                        }
+                for (const int& k : vehicles) {
+                    int veh_idx = k * no_cust_d + i;
+                    if (gamma_indices.find(veh_idx) != gamma_indices.end()) {
+                        lexpr2 += veh_dist[k][i] * gamma[veh_idx];
                     }
+                }
+                if (main_type == "2I") {
                     for (const int& j : customers) {
                         if (i == j) continue;
                         const int idx = j * no_cust_d + i;
@@ -1580,10 +1638,6 @@ private:
                 }
                 else {
                     for (const int& k : vehicles) {
-						int veh_idx = k * no_cust_d + i;
-						if (gamma_indices.find(veh_idx) != gamma_indices.end()) {
-							lexpr2 += veh_dist[k][i] * gamma[veh_idx];
-						}
 						for (const int& j : customers) {
 							if (i == j) continue;
 							const int idx = k * no_cust_d_squared + j * no_cust_d + i;
@@ -1599,7 +1653,6 @@ private:
                     const int idx = i * no_cust_d + j;
                     if (sigma_indices.find(idx) != sigma_indices.end()) lexpr3 += sigma[idx];
                     if (main_type == "2I") {
-                        const int idx = i * no_cust_d + j;
                         int k_min_l = std::numeric_limits<int>::max();
                         for (const int& k : vehicles) {
                             k_min_l = std::min(k_min_l, L[k][i][j]);
@@ -1622,21 +1675,21 @@ private:
                 lexpr2.clear();
                 lexpr3.clear();
             }
-            // Upper Bound - TTCF2.2
+            // Upper Bound - TTCF.2
+            model->update();
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     const int idx = i * no_cust_d + j;
                     if (sigma_indices.find(idx) == sigma_indices.end()) continue;
                     if (main_type == "2I") {
-                        const int idx = j * no_cust_d + i;
-                        int k_min_l = std::numeric_limits<int>::max();
-						int k_max_u = std::numeric_limits<int>::min();
-                        for (const int& k : vehicles) {
-                            k_min_l = std::min(k_min_l, L[k][i][j]);
-                            k_max_u = std::max(k_max_u, U[k][i][j]);
-                        }
-                        if (psi_indices.find(idx) != psi_indices.end()) {
+                        if (psi_indices.contains(idx)) {
+                            int k_min_l = std::numeric_limits<int>::max();
+                            int k_max_u = std::numeric_limits<int>::min();
+                            for (const int& k : vehicles) {
+                                k_min_l = std::min(k_min_l, L[k][i][j]);
+                                k_max_u = std::max(k_max_u, U[k][i][j]);
+                            }
                             lexpr += (k_max_u - k_min_l) * psi[idx];
                         }
                     }
@@ -1653,13 +1706,13 @@ private:
                 }
             }
             
-            // TTCF2.3
+            // TTCF.4
             for (const int& i : customers) {
                 // LHS
 				const int idx = i * no_cust_d + 0;
                 if (sigma_indices.find(idx) != sigma_indices.end()) lexpr += sigma[idx];
                 if (main_type == "2I") {
-                    if (psi_indices.find(idx) != psi_indices.end()) lexpr += cust_dist[i][0] * psi[idx];
+                    if (psi_indices.contains(idx)) lexpr += cust_dist[i][0] * psi[idx];
                 }
                 else {
                     for (const int& k : vehicles) {
@@ -1676,7 +1729,7 @@ private:
                     for (const int& k : vehicles) {
                         k_min_l = std::min(k_min_l, L[k][i][0]);
                     }
-                    if (psi_indices.find(idx) != psi_indices.end()) lexpr2 -= k_min_l * psi[idx];
+                    if (psi_indices.contains(idx)) lexpr2 -= k_min_l * psi[idx];
                 }
                 else {
                     for (const int& k : vehicles) {
@@ -1690,103 +1743,8 @@ private:
                 lexpr.clear();
 				lexpr2.clear();
             }
-            //for (const int& i : customers) {
-            //    for (const int& k : vehicles) {
-            //        const int idx = k * no_cust_d + i;
-            //        if (gamma_indices.find(idx) != gamma_indices.end()) lexpr += veh_dist[k][i] * gamma[idx];
-            //    }
 
-            //    for (const int& j : customers) {
-            //        if (i == j) continue;
-            //        const int idx = j * no_cust_d + i;
-            //        if (sigma_indices.find(idx) != sigma_indices.end()) lexpr2 += sigma[idx];
-            //        if (main_type == "2I") {
-            //            const int idx = j * no_cust_d + i;
-            //            if (psi_indices.find(idx) != psi_indices.end()) {
-            //                lexpr2 += cust_dist[j][i] * psi[idx];
-            //            }
-            //        }
-            //        else {
-            //            for (const int& k : vehicles) {
-            //                const int idx = k * no_cust_d_squared + j * no_cust_d + i;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    lexpr2 += cust_dist[j][i] * chi[idx];
-            //                }
-            //            }
-            //        }
-            //    }
-
-            //    for (const int& j : dest_and_cust) {
-            //        if (i == j) continue;
-            //        const int idx = i * no_cust_d + j;
-            //        if (sigma_indices.find(idx) != sigma_indices.end()) lexpr3 += sigma[idx];
-            //        if (main_type == "2I") {
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) {
-            //                lexpr3 += cust_dist[i][j] * psi[idx];
-            //            }
-            //        }
-            //        else {
-            //            for (const int& k : vehicles) {
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    lexpr3 += cust_dist[i][j] * chi[idx];
-            //                }
-            //            }
-            //        }
-            //    }
-
-            //    if (main_type == "2I") {
-            //        for (const int& j : dest_and_cust) {
-            //            if (i == j) continue;
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) lexpr4 += cust_dist[i][j] * psi[idx];
-            //        }
-            //    }
-            //    else {
-            //        for (const int& k : vehicles) {
-            //            for (const int& j : dest_and_cust) {
-            //                if (i == j) continue;
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) lexpr4 += cust_dist[i][j] * chi[idx];
-            //            }
-            //        }
-            //    }
-            //    model->addConstr(lexpr + lexpr2 == lexpr3 - lexpr4);
-            //    lexpr.clear();
-            //    lexpr2.clear();
-            //    lexpr3.clear();
-            //    lexpr4.clear();
-            //}
-
-            //for (const int& i : customers) {
-            //    for (const int& j : dest_and_cust) {
-            //        if (i == j) continue;
-            //        const int sigma_idx = i * no_cust_d + j;
-            //        if (sigma_indices.find(sigma_idx) == sigma_indices.end()) continue;
-            //        const int min_time = std::min(cust_arr_time[i], cust_arr_time[j]);
-            //        if (main_type == "2I") {
-            //            const int idx = i * no_cust_d + j;
-            //            if (psi_indices.find(idx) != psi_indices.end()) {
-            //                lexpr += psi[idx];
-            //            }
-            //        }
-            //        else {
-            //            for (const int& k : vehicles) {
-            //                const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-            //                if (chi_indices.find(idx) != chi_indices.end()) {
-            //                    lexpr += chi[idx];
-            //                }
-            //            }
-            //        }
-            //        //model->addConstr(cust_dist[i][j] * lexpr <= sigma[sigma_idx]);
-            //        if (j > 0) model->addConstr(sigma[sigma_idx] <= (min_time - cust_dist[i][j] - cust_dist[j][0]) * lexpr);
-            //        else model->addConstr(sigma[sigma_idx] <= (min_time - cust_dist[i][j]) * lexpr);
-            //        lexpr.clear();
-            //    }
-            //}
-
-            // Deadline flow - TTCF.4
+            // Deadline flow - TTCF.3.1
             for (const int& i : customers) {
                 for (const int& k : vehicles) {
                     const int idx = k * no_cust_d + i;
@@ -1807,14 +1765,14 @@ private:
                 lexpr2.clear();
                 lexpr3.clear();
             }
-            // TTCF.5
+            // TTCF.3.2
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     const int idx = i * no_cust_d + j;
                     if (omega_indices.find(idx) == omega_indices.end()) continue;
                     if (main_type == "2I") {
-                        if (psi_indices.find(idx) != psi_indices.end()) lexpr += psi[idx];
+                        if (psi_indices.contains(idx)) lexpr += psi[idx];
                     }
                     else {
                         for (const int& k : vehicles) {
@@ -1851,26 +1809,20 @@ private:
             //}
         }
 
-        if (cap_type == "CAP") {
+		// Standard Capacity constraints
+        if (main_type == "3I") {
             for (const int& k : vehicles) {
                 for (const int& i : customers) {
-                    if (main_type == "2I") {
-                        const int idx = k * no_cust_d + i;
-                        if (xi_indices.find(idx) != xi_indices.end()) lexpr += demand[i] * xi[idx];
-                    }
-                    else {
-                        for (const int& j : dest_and_cust) {
-                            if (i == j) continue;
-                            const int idx = k * no_cust_d_squared + i * no_cust_d + j;
-                            if (chi_indices.find(idx) != chi_indices.end()) lexpr += demand[i] * chi[idx];
-
-                        }
+                    for (const int& j : dest_and_cust) {
+                        if (i == j) continue;
+                        const int idx = k * no_cust_d_squared + i * no_cust_d + j;
+                        if (chi_indices.contains(idx)) lexpr += demand[i] * chi[idx];
                     }
                 }
 
                 for (const int& j : customers) {
                     const int idx = k * no_cust_d + j;
-                    if (gamma_indices.find(idx) != gamma_indices.end()) lexpr2 += gamma[idx];
+                    if (gamma_indices.contains(idx)) lexpr2 += gamma[idx];
                 }
 
                 model->addConstr(lexpr <= (capacity[k] - veh_occ[k]) * lexpr2);
@@ -1881,7 +1833,10 @@ private:
     }
 
     // Retrieves solution
-    void retrieve_solution(std::set<std::tuple<int, int, double>>& solution, std::unordered_map<int, double>& tau_solution){
+    void retrieve_solution(std::set<std::tuple<int, int, double>>& x_solution, 
+        std::set<std::tuple<int, int, double>>& gamma_solution, 
+        std::unordered_map<int, double>& tau_solution
+    ){
         if (main_type == "2I") {
             for (const int& idx : psi_indices) {
                 const int i = int(floor(idx / no_cust_d));
@@ -1894,8 +1849,8 @@ private:
                     }
                 }
                 if (val >= 1e-3) {
-                    if (j == 0) solution.insert({ j, i, val });
-                    else solution.insert({ i, j, val });
+                    if (j == 0) x_solution.insert({ j, i, val });
+                    else x_solution.insert({ i, j, val });
                 }
             }
         }
@@ -1903,6 +1858,7 @@ private:
             const int no_cust_d_squared = int(pow(no_cust_d, 2));
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
+					//if (i == j) continue;
                     double val = 0;
                     for (const int& k : vehicles) {
                         const int idx = k * no_cust_d_squared + i * no_cust_d + j;
@@ -1915,17 +1871,25 @@ private:
                         }
                     }
                     if (val >= 1e-3) {
-                        if (j == 0) solution.insert({ j, i, val });
-                        else solution.insert({ i, j, val });
+                        if (j == 0) x_solution.insert({ j, i, val });
+                        else x_solution.insert({ i, j, val });
                     }
                 }
             }
         }
+
+		for (const auto& [idx, var] : gamma) {
+			double val = var.get(GRB_DoubleAttr_X);
+			if (val >= 1e-3) {
+				const int k = int(floor(idx / no_cust_d));
+				const int i = idx - k * no_cust_d;
+				gamma_solution.insert({ k, i, val });
+			}
+		}
+
 		for (const auto& [i, var] : tau) {
 			double val = var.get(GRB_DoubleAttr_X);
-			//if (val >= 1e-3) {
-				tau_solution[i] = val;
-			//}
+            if (val >= 1e-3) tau_solution[i] = val;
 		}
     }
 
@@ -1958,33 +1922,80 @@ private:
         }
     }
 
-    void add_rc_inequalities2(std::vector<RC_Inequality2>& violated_inequalties, bool& cuts_added) {
+    void add_fc_inequalities(std::vector<RC_Inequality2>& violated_inequalties, bool& cuts_added) {
         cuts_added = false;
         const int no_cust_d_squared = int(pow(no_cust_d, 2));
 
         for (RC_Inequality2& cut : violated_inequalties) {
+            cuts_added = true;
+            std::vector<GRBVar> z(no_veh);
+            for (const int& k : vehicles) {
+                z[k] = model->addVar(0, 1, NULL, GRB_CONTINUOUS, "z_" + std::to_string(k));
+            }
+            model->update();
             GRBLinExpr lexpr, lexpr2;
             for (const int& i : cut.set) {
-                for (const int& j : cut.set) {
-                    if (i == j) continue;
+                for (const int& k : vehicles) {
+					const int idx = k * no_cust_d + i;
+					if (gamma_indices.contains(idx)) {
+						lexpr += gamma[idx];
+					}
+                }
+                for (const int& j : customers) {
+                    if (cut.set.contains(j)) continue;
                     if (main_type == "2I") {
-                        const int idx = i * no_cust_d + j;
+                        const int idx = j * no_cust_d + i;
                         if (psi_indices.find(idx) != psi_indices.end()) lexpr += psi[idx];
 
                     }
                     else if (main_type == "3I") {
                         for (const int& k : vehicles) {
-                            const int idx = k * no_cust_d_squared + i * no_cust_d + j;
+                            const int idx = k * no_cust_d_squared + j * no_cust_d + i;
                             if (chi_indices.find(idx) != chi_indices.end()) lexpr += chi[idx];
                         }
                     }
                 }
-                if (tau_indices.contains(i)) lexpr2 += (max_cap - demand[i]) * tau[i];
             }
-            if (max_cap * lexpr.getValue() >= lexpr2.getValue() + 1e-3) {
-                cuts_added = true;
-                model->addConstr(max_cap * lexpr <= lexpr2);
+			for (const int& k : vehicles) lexpr2 += z[k];
+            model->addConstr(lexpr >= lexpr2);
+			//std::cout << lexpr << ">=" << lexpr2 << std::endl;
+            lexpr.clear();
+            lexpr2.clear();
+
+            for (const int& k : vehicles) {
+                for (const int& i : customers) {
+					const int idx = k * no_cust_d + i;
+                    if (gamma_indices.contains(idx)) {
+                        lexpr += gamma[idx];
+                    }
+                }
+                for (const int& i : cut.set) {
+                    const int idx = k * no_cust_d + i;
+                    if (gamma_indices.contains(idx)) {
+                        lexpr2 += gamma[idx];
+                    }
+                }
+				model->addConstr(z[k] <= lexpr);
+                model->addConstr(z[k] >= lexpr2);
+
+                //std::cout << lexpr << std::endl;
+
+                lexpr.clear();
+                lexpr2.clear();
             }
+
+            for (const int& k : vehicles) {
+                lexpr += (capacity[k] - veh_occ[k]) * z[k];
+            }
+            for (const int& i : cut.set) {
+                //std::cout << i << std::endl;
+                if (tau_indices.contains(i)) lexpr2 += demand[i] * tau[i];
+            }
+            model->addConstr(lexpr >= lexpr2);
+            //std::cout << lexpr << ">=" << lexpr2 << std::endl;
+
+            lexpr.clear();
+            lexpr2.clear();
         }
     }
 
@@ -1995,6 +2006,7 @@ public:
     int no_veh;
     int no_cust;
     int no_cust_d;
+    int no_cust_d_squared;
     int time_ub;
     int no_veh_vars = 0;
     int no_total_vars = 0;
@@ -2002,9 +2014,8 @@ public:
     GRBEnv env = GRBEnv();
     std::string graph_type;
     std::string main_type;
-    std::string sec_type;
-    std::string time_type;
     std::string cap_type;
+    std::string time_type;
     int num_threads = 12;
     int time_limit = 3600;
 
@@ -2024,10 +2035,15 @@ public:
     // Customer Data
     std::vector<Coords> cust_coords;
     std::vector<int> demand;
+    std::vector<int> profit;
     std::vector<int> cust_arr_time;
     std::vector<std::vector<int>> cust_dist; // Upper triangular matrix of distances - customer zero is the destination
     std::set<int> customers;
     std::set<int> dest_and_cust;
+
+    // Shortest Path
+    std::vector<std::vector<int>> shortest_path_from_veh;
+    std::vector<int> shortest_path_to_dest;
 
     // Model Properties
     GRBModel* model = nullptr;
@@ -2057,21 +2073,17 @@ public:
     int total_rcc = 0;
 
     // Indices
+    std::unordered_set<int> tau_indices;
     std::unordered_set<int> gamma_indices;
     std::unordered_set<int> chi_indices;
     std::unordered_set<int> phi_indices;
-    std::unordered_set<int> xi_indices;
     std::unordered_set<int> psi_indices;
     std::unordered_set<int> zeta_indices;
-    std::unordered_set<int> rho_indices;
-    std::unordered_set<int> rho_veh_indices;
     std::unordered_set<int> zeta_multi_indices;
     std::unordered_set<int> rho_multi_indices;
-    std::unordered_set<int> lambda_indices;
+    std::unordered_set<int> Gamma_indices;
     std::unordered_set<int> sigma_indices;
     std::unordered_set<int> omega_indices;
-    std::unordered_set<int> Gamma_indices;
-    std::unordered_set<int> tau_indices;
 
     // Separation
     std::vector<int> vehicle_sizes;
@@ -2087,8 +2099,8 @@ public:
     double RC_separation_time = 0;
 
     // Initializes instance
-    FMRSP(const std::string& filename, const std::string main, const std::string sec, const std::string time, const std::string cap, const int& threads, const int& time_lim) {
-        std::cout << main << "_" << sec << "_" << time << "_" << cap << std::endl;
+    FMRSP(const std::string& filename, const std::string main, const std::string cap, const std::string time, const int& threads, const int& time_lim) {
+        std::cout << main << "_" << cap << "_" << time << std::endl;
 
         // Load Data
         InstanceData inst_data = load_instance(filename);
@@ -2098,6 +2110,7 @@ public:
         no_veh = inst_data.no_veh;
         no_cust = inst_data.no_cust;
         no_cust_d = no_cust + 1;
+        no_cust_d_squared = int(pow(no_cust_d, 2));
         time_ub = inst_data.time_ub;
         num_threads = threads;
         time_limit = time_lim;
@@ -2126,6 +2139,53 @@ public:
             max_cap = std::max(capacity[k] - veh_occ[k], max_cap);
         }
 
+        // Determine profits
+		profit.resize(no_cust_d);
+        for (const int& i : customers) {
+            profit[i] = demand[i] * cust_dist[i][0];
+        }
+
+        // Determine Shortest Paths
+        shortest_path_from_veh.resize(no_veh);
+        for (const int& k : vehicles) {
+			shortest_path_from_veh[k].resize(no_cust_d);
+            for (const int& i : dest_and_cust) {
+				shortest_path_from_veh[k][i] = veh_dist[k][i];
+            }
+		}
+        while (true) {
+            bool any_change = false;
+            for (const int& k : vehicles) {
+                for (const int& i : customers) {
+                    for (const int& j : customers) {
+                        if (i == j) continue;
+                        if (shortest_path_from_veh[k][j] > cust_dist[i][j] + shortest_path_from_veh[k][i]) {
+                            shortest_path_from_veh[k][j] = cust_dist[i][j] + shortest_path_from_veh[k][i];
+                            any_change = true;
+                        }
+                    }
+                }
+            }
+            if (!any_change) break;
+        }
+		shortest_path_to_dest.resize(no_cust_d);
+        for (const int& i : customers) {
+            shortest_path_to_dest[i] = cust_dist[i][0];
+        }
+        while (true) {
+			bool any_change = false;
+            for (const int& i : customers) {
+                for (const int& j : customers) {
+                    if (i == j) continue;
+                    if (shortest_path_to_dest[i] > cust_dist[i][j] + shortest_path_to_dest[j]) {
+                        shortest_path_to_dest[i] = cust_dist[i][j] + shortest_path_to_dest[j];
+                        any_change = true;
+					}
+                }
+            }
+			if (!any_change) break;
+        }
+
         rounded_cap.resize(no_cust * (no_cust - 1) / 2);
 
         // Setup Separation Data
@@ -2149,15 +2209,14 @@ public:
 
         // Set model types
         main_type = main;
-        sec_type = sec;
-        time_type = time;
         cap_type = cap;
+        time_type = time;
 
         construct_indices();
     }
 
     // Eliminate Variables
-    void preprocess() {
+    void preprocess2() {
         auto start = std::chrono::high_resolution_clock::now();
         std::cout << "Eliminating Variables..." << std::endl;
         std::unordered_set<int> gamma_indices_removed;
@@ -2218,15 +2277,6 @@ public:
             variables_removed += phi_indices_removed.size();
         }
 
-        // xi
-        if (xi_indices.size() > 0) std::cout << "Xi variables eliminated: " << std::fixed << std::setprecision(2) << xi_indices_removed.size() / double(no_veh * no_cust_d) * 100 << "%" << std::endl;
-        if (xi_indices_removed.size() > 0) {
-            for (const int& idx : xi_indices_removed) {
-                xi_indices.erase(idx);
-            }
-            variables_removed += xi_indices_removed.size();
-        }
-
         //Psi
         if (psi_indices.size() > 0 ) std::cout << "Psi variables eliminated: " << std::fixed << std::setprecision(2) << psi_indices_removed.size() / double(pow(no_cust_d, 2) - no_cust_d) * 100 << "%" << std::endl;
         if (psi_indices_removed.size() > 0) {
@@ -2237,31 +2287,13 @@ public:
         }
 
         // Zeta
-        if (zeta_indices.size() > 0 && sec_type == "COCF") std::cout << "Zeta variables eliminated: " << std::fixed << std::setprecision(2) << zeta_indices_removed.size() / double(pow(no_cust, 2)) * 100 << "%" << std::endl;
-        else if (zeta_indices.size() > 0 && sec_type == "TCF") std::cout << "Zeta variables eliminated: " << std::fixed << std::setprecision(2) << zeta_indices_removed.size() / double(pow(no_cust_d, 2) - no_cust_d) * 100 << "%" << std::endl;
+        if (zeta_indices.size() > 0 && cap_type == "COCF") std::cout << "Zeta variables eliminated: " << std::fixed << std::setprecision(2) << zeta_indices_removed.size() / double(pow(no_cust, 2)) * 100 << "%" << std::endl;
+        else if (zeta_indices.size() > 0 && cap_type == "TCF") std::cout << "Zeta variables eliminated: " << std::fixed << std::setprecision(2) << zeta_indices_removed.size() / double(pow(no_cust_d, 2) - no_cust_d) * 100 << "%" << std::endl;
         if (zeta_indices_removed.size() > 0) {
             for (const int& idx : zeta_indices_removed) {
                 zeta_indices.erase(idx);
             }
             variables_removed += zeta_indices_removed.size();
-        }
-
-        // Rho
-        if (rho_indices.size() > 0) std::cout << "Rho variables eliminated: " << std::fixed << std::setprecision(2) << rho_indices_removed.size() / double(pow(no_cust, 2)) * 100 << "%" << std::endl;
-        if (rho_indices_removed.size() > 0) {
-            for (const int& idx : rho_indices_removed) {
-                rho_indices.erase(idx);
-            }
-            variables_removed += rho_indices_removed.size();
-        }
-
-        // Rho_veh
-        if (rho_veh_indices.size() > 0) std::cout << "Rho_veh variables eliminated: " << std::fixed << std::setprecision(2) << rho_veh_indices_removed.size() / double((no_veh * no_cust)) * 100 << "%" << std::endl;
-        if (rho_veh_indices_removed.size() > 0) {
-            for (const int& idx : rho_veh_indices_removed) {
-                rho_veh_indices.erase(idx);
-            }
-            variables_removed += rho_veh_indices_removed.size();
         }
 
         // Zeta_multi
@@ -2353,23 +2385,26 @@ public:
         if (separate_rci) {
             std::cout << initial_lp << std::endl;
             std::set<std::tuple<int, int, double>> x_solution;
+            std::set<std::tuple<int, int, double>> gamma_solution;
 			std::unordered_map<int, double> tau_solution;
             std::vector<double> no_vehicles_used;
             std::vector<RC_Inequality> violated_inequalties;
-            std::vector<RC_Inequality2> violated_inequalties2;
+            //std::vector<RC_Inequality2> violated_inequalties2;
 
             double max_viol = 0;
-            bool cuts_added, cuts_added2 = false;
+            bool cuts_added = false, cuts_added2 = false;
             while (true) {
-                retrieve_solution(x_solution, tau_solution);
+                retrieve_solution(x_solution, gamma_solution, tau_solution);
                 separate_rcc_exactly(violated_inequalties, max_viol, x_solution, customers, max_cap, demand, 1, RC_separation_time, env);
-                //separate_rcc_exactly2(violated_inequalties2, max_viol, x_solution, tau_solution, customers, max_cap, demand, RC_separation_time, env);
+                //double violation = 0;
+                //violation = separate_fci_exactly(violated_inequalties2, max_viol, x_solution, gamma_solution, tau_solution, customers, vehicles, capacity, veh_occ, demand, RC_separation_time, env);
                 add_rc_inequalities(violated_inequalties, cuts_added);
-                //add_rc_inequalities2(violated_inequalties2, cuts_added2);
+                //if (violation >= 0.01) add_fc_inequalities(violated_inequalties2, cuts_added2);
 
-                if (!cuts_added && !cuts_added2) break;
+                if (!cuts_added) break;
 
                 x_solution.clear();
+                gamma_solution.clear();
                 tau_solution.clear();
                 no_vehicles_used.clear();
                 violated_inequalties.clear();
@@ -2378,6 +2413,7 @@ public:
 
             }
         }
+        optimise_model();
         strengthened_lp = model->get(GRB_DoubleAttr_ObjVal);
         stop = std::chrono::high_resolution_clock::now();
         lp_rcc_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
