@@ -75,7 +75,7 @@ std::vector<std::string> TEST_INSTANCES{
 int main() {
 	//{ "A-n60-k19", "B-n58-k19", "P-n75-k25", "X-n82-k27", "M-n90-k30", "F-n101-k33" }
 
-	for (const std::string file : {"A-n51-k17"}) {
+	for (const std::string file : {"E-n16-k5"}) {
 		auto start = std::chrono::high_resolution_clock::now();
 		// Works only in visual studio
 		//FILE* stream;
@@ -91,7 +91,7 @@ int main() {
 		//std::streambThis suf* originalCerrBuffer = std::cerr.rdbuf();
 		//std::cout.rdbuf(logFile.rdbuf());
 		//std::cerr.rdbuf(logFile.rdbuf());
-		FMRSP inst = FMRSP(file, "3I", "COCF", "TTCF", THREADS, TIME_LIMIT);
+		FMRSP inst = FMRSP(file, "3I", "CMCF", "TTCF", THREADS, TIME_LIMIT);
 		//inst.preprocess();
 		//EB inst = EB(file, "TIME", THREADS, TIME_LIMIT);
 		//RB inst = RB(file, THREADS, TIME_LIMIT);

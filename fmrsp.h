@@ -151,7 +151,6 @@ private:
 		int rho_multi_before = rho_multi_indices.size();
 		int sigma_before = sigma_indices.size();
 		int omega_before = omega_indices.size();
-
         // Eliminate Variables
         while (true) {
             int total_removed = 0;
@@ -458,10 +457,10 @@ private:
                         }
                     }
                     if (all_edges_eliminated || all_edges_eliminated2) {
-                        can_eliminate = true;
+                        //can_eliminate = true;
                     }
                 }
-                else {
+                if (!can_eliminate) {
                     // 4.1
                     if (main_type == "3I") {
                         bool all_edges_eliminated = true;
@@ -572,7 +571,8 @@ private:
         if (tau_before > 0) std::cout << "Tau variables eliminated: " << std::fixed << std::setprecision(2) << (tau_before - tau_indices.size()) / float(tau_before) * 100 << "%" << std::endl;
         if (gamma_before > 0) std::cout << "Gamma variables eliminated: " << std::fixed << std::setprecision(2) << (gamma_before - gamma_indices.size()) / float(gamma_before) * 100 << "%" << std::endl;
         if (chi_before > 0) std::cout << "Chi variables eliminated: " << std::fixed << std::setprecision(2) << (chi_before - chi_indices.size()) / float(chi_before) * 100 << "%" << std::endl;
-        if (phi_before > 0) std::cout << "Phi variables eliminated: " << std::fixed << std::setprecision(2) << (psi_before - psi_indices.size()) / float(phi_before) * 100 << "%" << std::endl;
+        if (psi_before > 0) std::cout << "Psi variables eliminated: " << std::fixed << std::setprecision(2) << (psi_before - psi_indices.size()) / float(psi_before) * 100 << "%" << std::endl;
+        if (phi_before > 0) std::cout << "Phi variables eliminated: " << std::fixed << std::setprecision(2) << (phi_before - phi_indices.size()) / float(phi_before) * 100 << "%" << std::endl;
         if (zeta_before > 0) std::cout << "Zeta variables eliminated: " << std::fixed << std::setprecision(2) << (zeta_before - zeta_indices.size()) / float(zeta_before) * 100 << "%" << std::endl;
 		if (zeta_multi_before > 0) std::cout << "Zeta Multi variables eliminated: " << std::fixed << std::setprecision(2) << (zeta_multi_before - zeta_multi_indices.size()) / float(zeta_multi_before) * 100 << "%" << std::endl;
 		if (rho_multi_before > 0) std::cout << "Rho Multi variables eliminated: " << std::fixed << std::setprecision(2) << (rho_multi_before - rho_multi_indices.size()) / float(rho_multi_before) * 100 << "%" << std::endl;
@@ -1474,21 +1474,17 @@ public:
 
     // Model Properties
     GRBModel* model = nullptr;
+    std::unordered_map<int, GRBVar> tau;
     std::unordered_map<int, GRBVar> gamma;
     std::unordered_map<int, GRBVar> chi;
     std::unordered_map<int, GRBVar> phi;
-    std::unordered_map<int, GRBVar> xi;
     std::unordered_map<int, GRBVar> psi;
     std::unordered_map<int, GRBVar> zeta;
-    std::unordered_map<int, GRBVar> rho;
-    std::unordered_map<int, GRBVar> rho_veh;
     std::unordered_map<int, GRBVar> zeta_multi;
     std::unordered_map<int, GRBVar> rho_multi;
-    std::unordered_map<int, GRBVar> lambda;
     std::unordered_map<int, GRBVar> sigma;
     std::unordered_map<int, GRBVar> omega;
     std::unordered_map<int, GRBVar> Gamma;
-    std::unordered_map<int, GRBVar> tau;
 
 
     int no_base_constraints = 0;
@@ -1674,6 +1670,7 @@ public:
     void solve_root_relaxation(bool separate_rci = true, bool silent = true, bool preprocess_instance = true) {
         if (preprocess_instance) preprocess();
         if (model_construction_time == 0) create_model(true, silent);
+        return;
 
         auto start = std::chrono::high_resolution_clock::now();
         optimise_model();
