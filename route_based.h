@@ -427,7 +427,7 @@ public:
 
             for (int idx = 0; idx < var_indices.size(); idx++) {
                 ub[idx] = 1.0;
-                objs[idx] = route_cost[idx_to_route[idx].first][idx_to_route[idx].second];
+                objs[idx] = -route_cost[idx_to_route[idx].first][idx_to_route[idx].second];
                 vtypes[idx] = vtype;
                 names [idx] ="lamda[" + itos(idx) + "]";
             }
@@ -437,7 +437,7 @@ public:
         }
         // Add constraints
         GRBLinExpr lexpr, lexpr2, lexpr3;
-        // At most service customer once
+        // RB. 2
         for (const int& i : customers) {
             for (const int& idx : route_cust_idx[i]) {
                 lexpr += vars[idx];
@@ -445,16 +445,16 @@ public:
             model->addConstr(lexpr <= 1);
             lexpr.clear();
         }
-        // One vehicle can only take one path
+        // RB.3/4
         for (const int& k : vehicles) {
             for (int idx = first_route_index[k]; idx < first_route_index[k + 1]; idx++) {
                 if (var_indices_subset.find(idx) != var_indices_subset.end()) lexpr += vars[idx];
             }
             if (veh_occ[k] == 0) model->addConstr(lexpr <= 1);
             else model->addConstr(lexpr == 1);
-            //model->addConstr(veh_occ[k] <= veh_occ[k] * lexpr);
             lexpr.clear();
         }
+        model->set(GRB_IntAttr_ModelSense, GRB_MAXIMIZE);
         std::cout << "Model Constructed." << std::endl;
         auto stop = std::chrono::high_resolution_clock::now();
         model_construction_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
@@ -467,20 +467,7 @@ public:
         total_lp_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-
-    void remove_variables() { 
-        int k = 0;
-        for (int idx : var_indices_subset) {
-            if (idx >= first_route_index[k + 1]) k++;
-            if (veh_occ[k] > 0 && std::find(first_route_index.begin(), first_route_index.end(), idx) != first_route_index.end()) // Do not remove route directly to dest if vehicle must move
-            if (vars[idx].get(GRB_DoubleAttr_X) <= 0.0001 && vars[idx].get(GRB_DoubleAttr_RC) > 0.01) {
-                model->remove(vars[idx]);
-                var_indices_subset.erase(idx);
-            }
-        }
-    }
-
-    void solve_root_relaxation(bool separate_rci = true, bool silent = true) {
+    void solve_root_relaxation(bool separate_rci = true, bool silent = true, bool _ = true) {
         if (model_construction_time == 0) create_model(true, silent);
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -515,7 +502,7 @@ public:
         lp_rcc_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-    void solve_to_optimality(bool separate_rci = true, bool silent = true) {
+    void solve_to_optimality(bool separate_rci = true, bool silent = true, bool _ = true) {
         if (total_lp_solve_time == 0) {
             solve_root_relaxation(separate_rci, silent);
             mip_solve_time += lp_rcc_solve_time;

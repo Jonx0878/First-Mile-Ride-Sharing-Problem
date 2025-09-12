@@ -118,8 +118,6 @@ void separate_rcc_exactly(
 			new_cuts.emplace_back(RC_Inequality(S, std::round(S.size() - alpha.get(GRB_DoubleAttr_Xn))));
 		}
 	}
-	std::cout << max_violation << std::endl;
-
 	delete model;
 
 	auto stop = std::chrono::high_resolution_clock::now();

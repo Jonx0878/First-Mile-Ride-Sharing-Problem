@@ -75,7 +75,7 @@ std::vector<std::string> TEST_INSTANCES{
 int main() {
 	//{ "A-n60-k19", "B-n58-k19", "P-n75-k25", "X-n82-k27", "M-n90-k30", "F-n101-k33" }
 
-	for (const std::string file : {"E-n16-k5"}) {
+	for (const std::string file : {"B-n50-k16"}) {
 		auto start = std::chrono::high_resolution_clock::now();
 		// Works only in visual studio
 		//FILE* stream;
@@ -86,15 +86,15 @@ int main() {
 		//	std::cerr << "Failed to open log file." << std::endl;
 		//	return 1;
 		//}
-		// Redirect both std::cout and std::cerr
+		//// Redirect both std::cout and std::cerr
 		//std::streambuf* originalCoutBuffer = std::cout.rdbuf();
-		//std::streambThis suf* originalCerrBuffer = std::cerr.rdbuf();
+		//std::streambuf* originalCerrBuffer = std::cerr.rdbuf();
 		//std::cout.rdbuf(logFile.rdbuf());
 		//std::cerr.rdbuf(logFile.rdbuf());
-		FMRSP inst = FMRSP(file, "3I", "CMCF", "TTCF", THREADS, TIME_LIMIT);
+		//FMRSP inst = FMRSP(file, "2I", "COCF", "TTCF", THREADS, TIME_LIMIT);
 		//inst.preprocess();
-		//EB inst = EB(file, "TIME", THREADS, TIME_LIMIT);
-		//RB inst = RB(file, THREADS, TIME_LIMIT);
+		//EB inst = EB(file, "TTCF", THREADS, TIME_LIMIT);
+		REB inst = REB(file, THREADS, TIME_LIMIT);
 		//inst.print_all_routes();
 
 		if (RELAX) inst.solve_root_relaxation(SEPARATE_RCI, SILENT, PREPROCESS);

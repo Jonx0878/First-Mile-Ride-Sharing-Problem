@@ -192,14 +192,6 @@ private:
                         min_dist_prev[k][i] + cust_dist[veh_vertices[k][i][0]][0]);
                 }
             }
-            //if (min_other_current_dist < time_ub
-            //    && min_other_current_dist < min_dist_prev[k][idx] + cust_dist[veh_vertices[k][idx][0]][0]) {
-            //    keep_vertex[idx] = false;
-            //    continue;
-            //}
-            //if (min_next_distance[idx] > max_other_next_dist && min_next_distance[idx] < time_ub && max_other_next_dist > -time_ub) {
-            //    keep_vertex[idx] = false;
-            //}
         }
 
         const int no_verts = std::count(keep_vertex.begin(), keep_vertex.end(), true);
@@ -395,11 +387,6 @@ public:
     std::vector<std::vector<int>> demand_verts;
     std::vector<std::vector<int>> min_times;
 
-    //std::vector<std::vector<std::unordered_set<int>>> edges_out;
-    //std::vector<std::vector<std::unordered_set<int>>> edges_in;
-    //std::vector<std::vector<std::unordered_set<int>>> edges_out_cust;
-    //std::vector<std::vector<std::unordered_set<int>>> edges_in_cust;
-
     std::vector<std::vector<int>> routes;
     std::vector<int> route_cost;
     std::vector<int> route_demand;
@@ -475,10 +462,6 @@ public:
         // Determine possible routes pr vehicle
         for (const int& k : vehicles) {
             int size = capacity[k] - veh_occ[k];
-            //for (int i = 0; i <= size; i++) {
-            //    std::cout << k << " Stops: " << no_stops_indices[k][size] << " " << size << std::endl;
-            //}
-
             std::vector<std::set<int>> possible_next_events(veh_vertices[k].size());
             std::unordered_map<int, int> index_mapping;
             for (int idx = 1; idx < no_stops_indices[k][std::min(int(size), 2)]; idx++) {
@@ -743,7 +726,7 @@ public:
 
             for (int idx = 0; idx < var_indices.size(); idx++) {
                 ub[idx] = 1.0;
-                objs[idx] = route_cost[idx];
+                objs[idx] = -route_cost[idx];
                 vtypes[idx] = vtype;
                 names[idx] = "lamda[" + itos(idx) + "]";
             }
@@ -755,7 +738,7 @@ public:
         // Add constraints
         GRBLinExpr lexpr, lexpr2, lexpr3;
 
-        // At most service customer once
+        // RB.2
         for (const int& i : customers) {
             for (const int& idx : route_cust_idx[i]) {
                 lexpr += vars[idx];
@@ -764,16 +747,17 @@ public:
             lexpr.clear();
         }
 
-        // One vehicle can only take one path
+        // RB.3/4
         for (const int& k : vehicles) {
             for (int idx = first_route_index[k]; idx < first_route_index[k + 1]; idx++) {
                 if (var_indices_subset.find(idx) != var_indices_subset.end()) lexpr += vars[idx];
             }
             if (veh_occ[k] == 0) model->addConstr(lexpr <= 1);
             else model->addConstr(lexpr == 1);
-            //model->addConstr(veh_occ[k] <= veh_occ[k] * lexpr);
             lexpr.clear();
         }
+
+        model->set(GRB_IntAttr_ModelSense, GRB_MAXIMIZE);
 
         std::cout << "Model Constructed." << std::endl;
         auto stop = std::chrono::high_resolution_clock::now();
@@ -787,7 +771,7 @@ public:
         total_lp_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-    void solve_root_relaxation(bool separate_rci = true, bool silent = true) {
+    void solve_root_relaxation(bool separate_rci = true, bool silent = true, bool _ = true) {
         if (model_construction_time == 0) create_model(true, silent);
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -822,7 +806,7 @@ public:
         lp_rcc_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-    void solve_to_optimality(bool separate_rci = true, bool silent = true) {
+    void solve_to_optimality(bool separate_rci = true, bool silent = true, bool _ = true) {
         if (total_lp_solve_time == 0) {
             solve_root_relaxation(separate_rci, silent);
             mip_solve_time += lp_rcc_solve_time;

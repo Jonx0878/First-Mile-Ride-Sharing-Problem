@@ -123,32 +123,8 @@ private:
                 for (int n = 1; n <= size - demand_verts[k][i] + 1; n++) {
                     min_costs_n_step[k][idx][n] = std::min(min_costs_n_step[k][idx][n], min_costs_n_step[k][i][n - 1] + min_cost_diff);
                 }
-                //max_next_distance[idx] = std::max(max_next_distance[idx], min_dist_prev[k][idx] + next_dist);
-                //min_next_distance[idx] = std::min(min_next_distance[idx], min_dist_prev[k][idx] + next_dist);
-
             }
         }
-
-        // Calculate min_cost and events with visiting same customers
-        //std::unordered_map<int, std::string> vert_to_num;
-        //std::unordered_map<std::string, std::vector<int>> num_to_verts;
-        //for (int idx = 1; idx < veh_vertices[k].size(); idx++) {
-        //    min_costs[k][idx] = *std::ranges::min_element(min_costs_n_step[k][idx]);
-        //    std::vector<int> vertex;
-        //    int first_cust = veh_vertices[k][idx][0];
-        //    bool inserted = false;
-        //    for (int m = 1; m < veh_vertices[k][idx].size(); m++) {
-        //        if (!inserted && first_cust < veh_vertices[k][idx][m]) {
-        //            vertex.emplace_back(first_cust);
-        //            inserted = true;
-        //        }
-        //        vertex.emplace_back(veh_vertices[k][idx][m]);
-        //    }
-        //    if (!inserted) vertex.emplace_back(first_cust);
-        //    const std::string str = vert_to_str(vertex);
-        //    vert_to_num[idx] = str;
-        //    num_to_verts[str].emplace_back(idx);
-        //}
 
         // Remove vertices that cannot be optimal choices due to a better order
         const int min_profitable_cost = (veh_occ[k] == 0) ? 0 : veh_dist[k][0];
@@ -164,20 +140,6 @@ private:
                 keep_vertex[idx] = false;
                 continue;
             }
-            //std::string vert_as_num = vert_to_num[idx];
-            //if (num_to_verts[vert_as_num].size() == 1) {
-            //    continue;
-            //}
-            //int max_other_next_dist = -time_ub;
-            //int min_other_current_dist = time_ub;
-            //for (const int i : num_to_verts[vert_as_num]) {
-            //    if (i == idx) continue;
-            //    max_other_next_dist = std::max(max_other_next_dist, max_next_distance[i]);
-            //    if (demand_verts[k][idx] == size) {
-            //        min_other_current_dist = std::min(min_other_current_dist,
-            //            min_dist_prev[k][i] + cust_dist[veh_vertices[k][i][0]][0]);
-            //    }
-            //}
         }
 
         const int no_verts = std::count(keep_vertex.begin(), keep_vertex.end(), true);
@@ -326,6 +288,7 @@ public:
     // Customer Data
     std::vector<Coords> cust_coords;
     std::vector<int> demand;
+    std::vector<int> profit;
     std::vector<int> cust_arr_time;
     std::vector<std::vector<int>> cust_dist; // Upper triangular matrix of distances - customer zero is the destination
     std::set<int> customers;
@@ -348,8 +311,11 @@ public:
 
     // Edges
     std::unordered_set<int> var_indices;
+    std::unordered_map<int, GRBVar> tau;
+    std::unordered_map<int, GRBVar> Gamma;
     std::unordered_map<int, GRBVar> sigma;
     std::unordered_map<int, GRBVar> omega;
+    std::unordered_set<int> tau_indices;
     std::unordered_set<int> sigma_indices;
     std::unordered_set<int> omega_indices;
 
@@ -371,6 +337,13 @@ public:
     std::vector<std::vector<std::unordered_set<int>>> edges_in_cust;
 
     std::vector<std::vector<std::unordered_set<int>>> edges_i_to_j;
+    std::vector<std::vector<std::vector<std::unordered_set<int>>>> edges_cust_k_i_to_j;
+
+
+    // Shortest Path
+    std::vector<std::vector<int>> shortest_path_from_veh;
+    std::vector<int> shortest_path_to_dest;
+    std::vector<std::vector<std::vector<int>>> u;
 
 
     // Timings
@@ -496,7 +469,6 @@ public:
                         edges.erase(edges.begin() + idx);
                     }
                 }
-                //std::cout << edges_removed << std::endl;
                 if (edges_removed == 0) break;
             }
             first_var_index.emplace_back(edges.size());
@@ -542,11 +514,6 @@ public:
         for (const int& k : vehicles) {
             for (int j = 0; j < veh_vertices[k].size(); j++) {
                 std::string index = vert_to_str(veh_vertices[k][j]);
-                //int mult = 1;
-                //for (const int& i : veh_vertices[k][j]) {
-                //    index += mult * i;
-                //    mult *= pow(10, cust_magn);
-                //}
                 if (k == 0) {
                     num_to_index[index] = idx;
                     vertex_mapping[k][j] = idx;
@@ -576,7 +543,6 @@ public:
             for (int idx = first_var_index[k]; idx < first_var_index[k + 1]; idx++) {
                 edges[idx].first = vertex_mapping[k][edges[idx].first];
                 edges[idx].second = vertex_mapping[k][edges[idx].second];
-                //if (k == 1 && edges[idx].first == 58536) std::cout << idx << " " << k << " " << edges[idx].first << "->" << edges[idx].second << " OR " << vertices[edges[idx].first][0] << "->" << vertices[edges[idx].second][0] << std::endl;
             }
         }
         std::cout << "#Edges: " << edges.size() << std::endl;
@@ -636,6 +602,70 @@ public:
         }
 
         determine_graph();
+
+		// Determine shortest constants for time constraints
+        if (time_constr == "TTCF") {
+            // Shortest path to customer
+            shortest_path_from_veh.resize(no_veh);
+            for (const int& k : vehicles) {
+                shortest_path_from_veh[k].resize(no_cust_d);
+                for (const int& i : dest_and_cust) {
+                    shortest_path_from_veh[k][i] = veh_dist[k][i];
+                }
+            }
+            while (true) {
+                bool any_change = false;
+                for (const int& k : vehicles) {
+                    for (const int& i : customers) {
+                        for (const int& j : customers) {
+                            if (i == j) continue;
+                            if (shortest_path_from_veh[k][j] > cust_dist[i][j] + shortest_path_from_veh[k][i]) {
+                                shortest_path_from_veh[k][j] = cust_dist[i][j] + shortest_path_from_veh[k][i];
+                                any_change = true;
+                            }
+                        }
+                    }
+                }
+                if (!any_change) break;
+            }
+            // Shortest path to destination
+            shortest_path_to_dest.resize(no_cust_d);
+            for (const int& i : customers) {
+                shortest_path_to_dest[i] = cust_dist[i][0];
+            }
+            while (true) {
+                bool any_change = false;
+                for (const int& i : customers) {
+                    for (const int& j : customers) {
+                        if (i == j) continue;
+                        if (shortest_path_to_dest[i] > cust_dist[i][j] + shortest_path_to_dest[j]) {
+                            shortest_path_to_dest[i] = cust_dist[i][j] + shortest_path_to_dest[j];
+                            any_change = true;
+                        }
+                    }
+                }
+                if (!any_change) break;
+            }
+
+            // u
+            u.resize(no_veh);
+            for (const int& k : vehicles) {
+                u[k].resize(no_cust_d);
+                for (const int& i : customers) {
+                    u[k][i].resize(no_cust_d);
+                    for (const int& j : dest_and_cust) {
+                        if (i == j) continue;
+						u[k][i][j] = std::min(veh_arr_time[k], std::min(cust_arr_time[i], cust_arr_time[j])) - cust_dist[i][j] - shortest_path_to_dest[j];
+                    }
+                }
+            }
+        }
+
+        // Determine profits
+        profit.resize(no_cust_d);
+        for (const int& i : customers) {
+            profit[i] = demand[i] * cust_dist[i][0];
+        }
     }
 
     void create_model(bool relax = true, bool silent = true) {
@@ -648,7 +678,14 @@ public:
         edges_out_cust.resize(no_veh);
         edges_in_cust.resize(no_veh);
         edges_i_to_j.resize(no_cust_d);
+        edges_cust_k_i_to_j.resize(no_veh);
 
+        for (const int& k : vehicles) {
+            edges_cust_k_i_to_j[k].resize(no_cust_d);
+            for (const int& i : dest_and_cust) {
+                edges_cust_k_i_to_j[k][i].resize(no_cust_d);
+            }
+        }
         for (const int& i : dest_and_cust) edges_i_to_j[i].resize(no_cust_d);
 
         for (const int& k : vehicles) {
@@ -666,6 +703,7 @@ public:
                 edges_out_cust[k][i_cust].insert(idx);
                 edges_in_cust[k][j_cust].insert(idx);
                 edges_i_to_j[i_cust][j_cust].insert(idx);
+                edges_cust_k_i_to_j[k][i_cust][j_cust].insert(idx);
             }
         }
 
@@ -689,23 +727,50 @@ public:
             int j = edges[idx].second;
             int j_cust = vertices[j][0];
             if (i == 0) {
-                obj = veh_dist[k][j_cust];
+                obj = -veh_dist[k][j_cust];
                 name = "gamma[" + itos(k) + "][" + itos(j) + "]";
             }
             else {
-                obj = cust_dist[i_cust][j_cust] - demand[i_cust] * cust_dist[i_cust][0];
+                obj = profit[i_cust] - cust_dist[i_cust][j_cust];
                 name = "chi[" + itos(i) + "][" + itos(j) + "][" + itos(k) + "]";
             }
             vars[idx] = model->addVar(0.0, 1.0, obj, vtype, name);
         }
 
-        if (time_constr == "TTCF") {
-            // Sigma
+        // Tau
+        for (const int& i : customers) {
+            bool need_variable = false;
+            for (const int& k : vehicles) {
+                if (!edges_in_cust[k][i].empty() && !edges_out_cust[k][i].empty()) {
+                    need_variable = true;
+                    break;
+                }
+            }
+            if (need_variable) {
+                tau_indices.insert(i);
+				const std::string name = "tau[" + itos(i) + "]";
+                tau[i] = model->addVar(0, 1, 0, GRB_CONTINUOUS, name);
+            }
+        }
+
+        if (time_constr == "TIME") {
+            // Gamma
+            for (const int& k : vehicles) {
+                const std::string name = "Gamma[" + itos(k) + "]";
+                Gamma[k] = model->addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
+            }
+        }
+        else if (time_constr == "TTCF") {
+			// Construct Indices for sigma and omega
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j || edges_i_to_j[i][j].size() == 0) continue;
-                    if (std::min(cust_arr_time[i], cust_arr_time[j]) - cust_dist[i][j] - cust_dist[j][0] > 0) sigma_indices.insert(i * no_cust_d + j);
                     omega_indices.insert(i * no_cust_d + j);
+					int max_ub = std::numeric_limits<int>::min();
+                    for (const int& k : vehicles) {
+                        max_ub = std::max(max_ub, u[k][i][j] - shortest_path_from_veh[k][i]);
+                    }
+                    if (max_ub > 0) sigma_indices.insert(i * no_cust_d + j);
                 }
             }
 
@@ -714,8 +779,8 @@ public:
                 const int i = int(floor(idx / no_cust_d));
                 const int j = idx - i * no_cust_d;
                 const std::string name = "sigma[" + itos(i) + "][" + itos(j) + "]";
-                if (j > 0) sigma[idx] = model->addVar(0.0, std::min(cust_arr_time[i], cust_arr_time[j]) - cust_dist[i][j] - cust_dist[j][0], 0, GRB_CONTINUOUS, name);
-                else sigma[idx] = model->addVar(0.0, std::min(cust_arr_time[i], cust_arr_time[j]) - cust_dist[i][j], 0, GRB_CONTINUOUS, name);
+                if (j > 0) sigma[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
+                else sigma[idx] = model->addVar(0.0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
             }
 
             // Omega
@@ -723,184 +788,210 @@ public:
                 const int i = int(floor(idx / no_cust_d));
                 const int j = idx - i * no_cust_d;
                 const std::string name = "omega[" + itos(i) + "][" + itos(j) + "]";
-                omega[idx] = model->addVar(0, cust_arr_time[i], 0, GRB_CONTINUOUS, name);
+                omega[idx] = model->addVar(0, GRB_INFINITY, 0, GRB_CONTINUOUS, name);
             }
         }
 
         // Add constraints
         GRBLinExpr lexpr, lexpr2, lexpr3, lexpr4;
-        model->update();
         
-        // 3.2
+        // 2.2/2.3
         for (const int& k : vehicles) {
-            for (const int& idx : edges_out[k][0]) lexpr += vars[idx];
-            model->addConstr(lexpr <= 1);
+            for (const int& idx : edges_out[k][0]) lexpr += vars[idx]; // LHS
+            if (veh_occ[k] == 0) model->addConstr(lexpr <= 1);
+            else model->addConstr(lexpr == 1);
             lexpr.clear();
         }
 
-        // 3.3
+        // 2.4
         for (const int& k : vehicles) {
-            for (const int& idx : edges_out[k][0]) lexpr += vars[idx];
-            for (const int& idx : edges_in[k][0]) lexpr2 += vars[idx];
+            for (const int& idx : edges_out[k][0]) lexpr += vars[idx]; // LHS
+            for (const int& idx : edges_in[k][0]) lexpr2 += vars[idx]; // RHS
             model->addConstr(lexpr == lexpr2);
             lexpr.clear();
             lexpr2.clear();
         }
 
-        // 3.4
-        for (const int& k : vehicles) {
-            for (const int& idx : edges_out[k][0]) lexpr += veh_occ[k] * vars[idx];
-            model->addConstr(veh_occ[k] <= lexpr);
-            lexpr.clear();
-        }
 
-        // 3.5
+        // 2.5
         for (const int& i : customers) {
+            // LHS
             for (const int& k : vehicles) {
                 for (const int& idx : edges_out_cust[k][i]) lexpr += vars[idx];
             }
-            model->addConstr(lexpr <= 1);
+            // RHS
+			if (tau_indices.contains(i)) lexpr2 += tau[i];
+            model->addConstr(lexpr == lexpr2);
             lexpr.clear();
+            lexpr2.clear();
         }
 
-        // 3.6
-
+        // 2.6
         for (int j = 1; j < vertices.size(); j++) {
             for (const int& k : vehicles) {
-                for (const int& idx : edges_in[k][j]) lexpr += vars[idx];
-                for (const int& idx : edges_out[k][j]) lexpr2 += vars[idx];
+                for (const int& idx : edges_in[k][j]) lexpr += vars[idx]; // LHS
+                for (const int& idx : edges_out[k][j]) lexpr2 += vars[idx]; // RHS
                 if (lexpr.size() + lexpr2.size() > 0) model->addConstr(lexpr == lexpr2);
                 lexpr.clear();
                 lexpr2.clear();
             }
         }
 
-        // 3.7
         if (time_constr == "TIME"){
+            // TIME.1
             for (const int& k : vehicles) {
-                for (int idx = first_var_index[k]; idx < first_var_index[k + 1]; idx++) {
-                    if (edges[idx].first == 0) {
+                // RHS
+                for (const int& v : dest_and_cust) {
+                    for (const int& idx : edges_out_cust[k][v]) {
+                        int dist = 0;
                         int j = vertices[edges[idx].second][0];
-                        lexpr += (veh_dist[k][j] - veh_arr_time[k]) * vars[idx];
-                    }
-                    else {
-                        int l = vertices[edges[idx].first][0];
-                        int j = vertices[edges[idx].second][0];
-                        lexpr2 += cust_dist[l][j] * vars[idx];
+                        if (v == 0) dist = veh_dist[k][j];
+                        else dist = cust_dist[v][j];
+                        lexpr += dist * vars[idx];
                     }
                 }
-                int no_impl_for_k = 0;
-                for (const int& i : customers) {
-                    if (no_impl_for_k > 0 && veh_arr_time[k] <= cust_arr_time[i]) continue;
-                    double coeff = veh_arr_time[k] - cust_arr_time[i];
-                    // Customer Edges
-                    for (const int& idx : edges_out_cust[k][i]) lexpr3 += vars[idx];
-                    model->addConstr(lexpr + lexpr2 + coeff * lexpr3 <= 0);
-                    no_impl_for_k++;
-                    lexpr3.clear();
-                }
+                model->addConstr(Gamma[k] == lexpr);
                 lexpr.clear();
-                lexpr2.clear();
             }
+
+            // TIME.2
+			int max_cust_arr = *std::ranges::max_element(cust_arr_time);
+            for (const int& k : vehicles) {
+                if (max_cust_arr >= veh_arr_time[k]) {
+                    model->addConstr(Gamma[k] <= veh_arr_time[k]);
+                }
+                else {
+                    for (const int& i : customers) {
+                        if (veh_arr_time[k] <= cust_arr_time[i]) continue;
+                        // RHS
+                        for (const int& idx : edges_out_cust[k][i]) lexpr += vars[idx];
+                        model->addConstr(
+                            Gamma[k] <= veh_arr_time[k] + (cust_arr_time[i] - veh_arr_time[k]) * lexpr
+                        );
+                        lexpr.clear();
+                    }
+				}
+            }            
         }
         else if (time_constr == "TTCF") {
-            // TTCF
+            // TTCF.1
             for (const int& i : customers) {
-                for (const int& k : vehicles) {
-                    for (const int& idx : edges_i_to_j[0][i]) {
-                        if (edges_in_cust[k][i].find(idx) != edges_in_cust[k][i].end())lexpr += veh_dist[k][i] * vars[idx];
-                    }
-                }
-
+                // LHS
+                // First term
                 for (const int& j : customers) {
                     if (i == j) continue;
                     const int idx = j * no_cust_d + i;
-                    if (sigma_indices.find(idx) != sigma_indices.end()) lexpr2 += sigma[idx];
-                    for (const int& idx : edges_i_to_j[j][i]) lexpr2 += cust_dist[j][i] * vars[idx];
+                    if (sigma_indices.contains(idx)) lexpr += sigma[idx];
+                    for (const int& k : vehicles) {
+                        for (const int& idx : edges_cust_k_i_to_j[k][j][i]) {
+                            lexpr += shortest_path_from_veh[k][j] * vars[idx];
+                        }
+                    }
                 }
-
+                // Second term
+                for (const int& k : vehicles) {
+                    for (const int& idx : edges_in_cust[k][i]) {
+                        int time = 0;
+                        int j = vertices[edges[idx].first][0];
+                        if (j == 0) time = veh_dist[k][i];
+                        else time = cust_dist[j][i];
+                        lexpr2 += time * vars[idx];
+                    }
+                }
+                // RHS
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     const int idx = i * no_cust_d + j;
-                    if (sigma_indices.find(idx) != sigma_indices.end()) lexpr3 += sigma[idx];
-                    for (const int& idx : edges_i_to_j[i][j]) lexpr3 += cust_dist[i][j] * vars[idx];
-
+                    if (sigma_indices.contains(idx)) lexpr3 += sigma[idx];
+                    for (const int& k : vehicles) {
+                        for (const int& idx : edges_cust_k_i_to_j[k][i][j]) {
+                            lexpr3 += shortest_path_from_veh[k][i] * vars[idx];
+                        }
+                    }
                 }
-
-                for (const int& j : dest_and_cust) {
-                    if (i == j) continue;
-                    for (const int& idx : edges_i_to_j[i][j]) lexpr4 += cust_dist[i][j] * vars[idx];
-                }
-                model->addConstr(lexpr + lexpr2 == lexpr3 - lexpr4);
+                model->addConstr(lexpr + lexpr2 == lexpr3);
                 lexpr.clear();
                 lexpr2.clear();
                 lexpr3.clear();
-                lexpr4.clear();
             }
-
+            // TTCF.2
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
-                    const int sigma_idx = i * no_cust_d + j;
-                    if (sigma_indices.find(sigma_idx) == sigma_indices.end()) continue;
-                    const int min_time = std::min(cust_arr_time[i], cust_arr_time[j]);
-                    for (const int& idx : edges_i_to_j[i][j]) lexpr += vars[idx];
-
-                    //model->addConstr(cust_dist[i][j] * lexpr <= sigma[sigma_idx]);
-                    if (j > 0) model->addConstr(sigma[sigma_idx] <= (min_time - cust_dist[i][j] - cust_dist[j][0]) * lexpr);
-                    else model->addConstr(sigma[sigma_idx] <= (min_time - cust_dist[i][j]) * lexpr);
+                    const int idx = i * no_cust_d + j;
+                    if (!sigma_indices.contains(idx)) continue;
+                    // RHS
+                    for (const int& k : vehicles) {
+						for (const int& idx : edges_cust_k_i_to_j[k][i][j]) {
+                            lexpr += (u[k][i][j] - shortest_path_from_veh[k][i]) * vars[idx];
+                        }
+                    }
+                    model->addConstr(sigma[idx] <= lexpr);
                     lexpr.clear();
                 }
             }
-
-            // Deadline flow
+            // TTCF.3 (2.18)
             for (const int& i : customers) {
+                // LHS
                 for (const int& k : vehicles) {
-                    for (const int& idx : edges_i_to_j[0][i]) {
-                        if (edges_in_cust[k][i].find(idx) != edges_in_cust[k][i].end())lexpr += veh_arr_time[k] * vars[idx];
+                    for (const int& idx : edges_cust_k_i_to_j[k][0][i]) {
+                        lexpr += veh_arr_time[k] * vars[idx];
                     }
                 }
                 for (const int& j : customers) {
                     if (i == j) continue;
                     const int idx = j * no_cust_d + i;
-                    if (omega_indices.find(idx) != omega_indices.end()) lexpr += omega[idx];
+                    if (omega_indices.contains(idx)) lexpr += omega[idx];
                 }
-
+                // RHS
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     const int idx = i * no_cust_d + j;
-                    if (omega_indices.find(idx) != omega_indices.end()) lexpr2 += omega[idx];
+                    if (omega_indices.contains(idx)) lexpr2 += omega[idx];
                 }
-
                 model->addConstr(lexpr >= lexpr2);
                 lexpr.clear();
                 lexpr2.clear();
             }
-
+            // TTCF.3 (2.19)
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
                     const int idx = i * no_cust_d + j;
-                    if (omega_indices.find(idx) == omega_indices.end()) continue;
-
-                    for (const int& idx : edges_i_to_j[i][j]) lexpr += vars[idx];
-
-                    model->addConstr(omega[idx] <= cust_arr_time[i] * lexpr);
+                    if (!omega_indices.contains(idx)) continue;
+                    for (const int& k : vehicles) {
+                        for (const int& v_idx : edges_cust_k_i_to_j[k][i][j]) {
+                            lexpr += cust_arr_time[i] * vars[v_idx];
+                        }
+                    }
+                    model->addConstr(omega[idx] <= lexpr);
                     lexpr.clear();
                 }
             }
-
+            // TTCF.4
             for (const int& i : customers) {
+                // LHS
                 const int idx = i * no_cust_d + 0;
-                if (sigma_indices.find(idx) != sigma_indices.end()) lexpr += sigma[idx];
-                for (const int& idx : edges_i_to_j[i][0]) lexpr += cust_dist[i][0] * vars[idx];
-                if (omega_indices.find(idx) != omega_indices.end()) lexpr2 += omega[idx];
+                if (sigma_indices.contains(idx)) lexpr += sigma[idx];
+                for (const int& k : vehicles) {
+                    for (const int& v_idx : edges_cust_k_i_to_j[k][i][0]) {
+                        lexpr += cust_dist[i][0] * vars[v_idx];
+                    }
+                }
+                // RHS
+                if (omega_indices.contains(idx)) lexpr2 += omega[idx];
+                for (const int& k : vehicles) {
+                    for (const int& v_idx : edges_cust_k_i_to_j[k][i][0]) {
+                        lexpr2 -= shortest_path_from_veh[k][i] * vars[v_idx];
+                    }
+                }
                 model->addConstr(lexpr <= lexpr2);
                 lexpr.clear();
                 lexpr2.clear();
             }
+            
         }
-
+        model->set(GRB_IntAttr_ModelSense, GRB_MAXIMIZE);
         std::cout << "Model has been built" << std::endl;
         model->update();
         no_base_constraints = model->get(GRB_IntAttr_NumConstrs);
@@ -916,26 +1007,7 @@ public:
         total_lp_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-    //void add_variables(bool& new_vars) {
-    //    auto start = std::chrono::high_resolution_clock::now();
-
-    //    add_variables_EB(new_vars, no_base_constraints, veh_dist, cust_dist,  veh_occ, veh_arr_time, cust_arr_time,
-    //        demand, customers, no_veh, no_cust, no_cust_d, vertices, edges, first_var_index, model, vars, var_indices, var_indices_subset, rounded_cap, false, outer_iterations);
-
-    //    auto stop = std::chrono::high_resolution_clock::now();
-    //    auto duration = std::chrono::duration_cast<std::chrono::duration<double>>(stop - start);
-    //    add_vars_time += duration.count();
-    //}
-    //void add_all_variables(bool& new_vars) {
-    //    add_variables_EB(new_vars, no_base_constraints, veh_dist, cust_dist, veh_occ, veh_arr_time, cust_arr_time,
-    //        demand, customers, no_veh, no_cust, no_cust_d, vertices, edges, first_var_index, model, vars, var_indices, var_indices_subset, rounded_cap, true, outer_iterations);
-    //}
-
-    //void remove_constraints() { remove_constraints_from_model(model, no_base_constraints); };
-
-    //void remove_variables() { remove_variables_EB(model, vars, var_indices_subset, first_var_index); }
-
-    void solve_root_relaxation(bool separate_rci = true, bool silent = true) {
+    void solve_root_relaxation(bool separate_rci = true, bool silent = true, bool _ = true) {
         if (model_construction_time == 0) create_model(true, silent);
         auto start = std::chrono::high_resolution_clock::now();
         optimise_model();
@@ -969,7 +1041,7 @@ public:
         lp_rcc_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
-    void solve_to_optimality(bool separate_rci = true, bool silent = true) {
+    void solve_to_optimality(bool separate_rci = true, bool silent = true, bool _ = true) {
         if (total_lp_solve_time == 0) {
             solve_root_relaxation(separate_rci, silent);
             mip_solve_time += lp_rcc_solve_time;

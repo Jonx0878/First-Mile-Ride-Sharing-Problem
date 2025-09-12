@@ -498,13 +498,18 @@ private:
                 bool can_eliminate = false;
                 // 1
                 int u_ij = 0;
-                int max_cust_time = std::max(cust_arr_time[i], cust_arr_time[j]);
+                int max_cust_time = std::min(cust_arr_time[i], cust_arr_time[j]);
 				int shortest_path_to_i = std::numeric_limits<int>::max();
+				int max_ub = std::numeric_limits<int>::min();
                 for (const int& k : vehicles) {
-                    u_ij = std::max(u_ij, std::max(max_cust_time, veh_arr_time[k]) - cust_dist[i][j] - shortest_path_to_dest[j]);
+					int u_ij_k = std::min(max_cust_time, veh_arr_time[k])
+                        - cust_dist[i][j] - shortest_path_to_dest[j];
+                    u_ij = std::max(u_ij, u_ij_k);
 					shortest_path_to_i = std::min(shortest_path_to_i, shortest_path_from_veh[k][i]);
+                    max_ub = std::max(max_ub, u_ij_k - shortest_path_from_veh[k][i]);
 				}
-                if (u_ij + shortest_path_to_i <= 0) can_eliminate = true;
+                if (main_type == "3I" && max_ub <= 0) can_eliminate = true;
+				else if (main_type == "2I" && u_ij - shortest_path_to_i <= 0) can_eliminate = true;
                 // 2
                 else {
                     // 2.1
@@ -1101,6 +1106,7 @@ private:
                 }
                 else {
                     for (const int& i : customers) {
+                        if (cust_arr_time[k] >= veh_arr_time[k]) continue;
                         // RHS
                         lexpr += veh_arr_time[k];
                         for (const int& j : dest_and_cust) {
@@ -1670,7 +1676,6 @@ public:
     void solve_root_relaxation(bool separate_rci = true, bool silent = true, bool preprocess_instance = true) {
         if (preprocess_instance) preprocess();
         if (model_construction_time == 0) create_model(true, silent);
-        return;
 
         auto start = std::chrono::high_resolution_clock::now();
         optimise_model();
