@@ -32,7 +32,7 @@ private:
         if (size == 0) return;
         for (const int& i : customers) {
             const int min_time = std::min(cust_arr_time[i], veh_arr_time[k]);
-            if (demand[i] > size || veh_dist[k][i] + cust_dist[i][0] > min_time) continue;
+            if (demand[i] > size || veh_dist[k][i] + shortest_path_to_dest[i] > min_time) continue;
             vertex = { i };
             veh_vertices[k].emplace_back(vertex);
             no_stops[k].emplace_back(1);
@@ -49,7 +49,7 @@ private:
                     const int demand_sum = demand_verts[k][n] + demand[i];
                     const int min_time = std::min(min_times[k][n], cust_arr_time[i]);
                     const int min_dist_prev_vert = min_dist_prev[k][n] + cust_dist[veh_vertices[k][n][0]][i];
-                    if (demand_sum > size || min_dist_prev_vert + cust_dist[i][0] > min_time) continue;
+                    if (demand_sum > size || min_dist_prev_vert + shortest_path_to_dest[i] > min_time) continue;
                     // Add vertex
                     vertex = { i };
                     int first_cust = veh_vertices[k][n][0];
@@ -449,7 +449,7 @@ public:
                         else break;
                     }
                     if (same_cust_counter < no_stops[k][i]) continue;
-                    const int min_total_dist = min_dist_prev[k][i] + cust_dist[i_cust][j_cust] + cust_dist[j_cust][0];
+                    const int min_total_dist = min_dist_prev[k][i] + cust_dist[i_cust][j_cust] + shortest_path_to_dest[j_cust];
                     if ((min_dist_prev[k][i] + cust_dist[i_cust][j_cust] == min_dist_prev[k][j]) && (vert_costs[k][i] > min_costs[k][j]) && (min_total_dist <= min_times[k][j])) {
                         edges.emplace_back(std::make_pair(i, j));
                         edges_out[i]++;
@@ -601,6 +601,25 @@ public:
             max_cap = std::max(capacity[k] - veh_occ[k], max_cap);
         }
 
+        // Shortest path to destination
+        shortest_path_to_dest.resize(no_cust_d);
+        for (const int& i : customers) {
+            shortest_path_to_dest[i] = cust_dist[i][0];
+        }
+        while (true) {
+            bool any_change = false;
+            for (const int& i : customers) {
+                for (const int& j : customers) {
+                    if (i == j) continue;
+                    if (shortest_path_to_dest[i] > cust_dist[i][j] + shortest_path_to_dest[j]) {
+                        shortest_path_to_dest[i] = cust_dist[i][j] + shortest_path_to_dest[j];
+                        any_change = true;
+                    }
+                }
+            }
+            if (!any_change) break;
+        }
+
         determine_graph();
 
 		// Determine shortest constants for time constraints
@@ -628,24 +647,6 @@ public:
                 }
                 if (!any_change) break;
             }
-            // Shortest path to destination
-            shortest_path_to_dest.resize(no_cust_d);
-            for (const int& i : customers) {
-                shortest_path_to_dest[i] = cust_dist[i][0];
-            }
-            while (true) {
-                bool any_change = false;
-                for (const int& i : customers) {
-                    for (const int& j : customers) {
-                        if (i == j) continue;
-                        if (shortest_path_to_dest[i] > cust_dist[i][j] + shortest_path_to_dest[j]) {
-                            shortest_path_to_dest[i] = cust_dist[i][j] + shortest_path_to_dest[j];
-                            any_change = true;
-                        }
-                    }
-                }
-                if (!any_change) break;
-            }
 
             // u
             u.resize(no_veh);
@@ -655,7 +656,8 @@ public:
                     u[k][i].resize(no_cust_d);
                     for (const int& j : dest_and_cust) {
                         if (i == j) continue;
-						u[k][i][j] = std::min(veh_arr_time[k], std::min(cust_arr_time[i], cust_arr_time[j])) - cust_dist[i][j] - shortest_path_to_dest[j];
+                        u[k][i][j] = std::min(std::min(cust_arr_time[i], cust_arr_time[j]), veh_arr_time[k])
+                            - cust_dist[i][j] - shortest_path_to_dest[j];
                     }
                 }
             }

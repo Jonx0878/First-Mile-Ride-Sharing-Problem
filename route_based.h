@@ -55,18 +55,19 @@ private:
         if (size == 0) return;
         for (const int& i : customers) {
             std::vector<int> route;
-            int dist = veh_dist[k][i] + cust_dist[i][0];
+            int dist_before_dest = veh_dist[k][i];
+            int dist = dist_before_dest + cust_dist[i][0];
             int min_time = std::min(veh_arr_time[k], cust_arr_time[i]);
-            if (demand[i] > size || dist > min_time) continue;
+            if (demand[i] > size || dist_before_dest + shortest_path_to_dest[i] > min_time) continue;
             route.emplace_back(i);
             routes[k].emplace_back(route);
             route_demand[k].emplace_back(demand[i]);
-            route_dist[k].emplace_back(dist - cust_dist[i][0]);
+            route_dist[k].emplace_back(dist_before_dest);
             route_stops[k].emplace_back(1);
             route_min_time[k].emplace_back(min_time);
             route_cost[k].emplace_back(dist - demand[i] * cust_dist[i][0]);
             best_child_cost.emplace_back(dist - demand[i] * cust_dist[i][0]);
-            if (dist - demand[i] * cust_dist[i][0] > min_prof_dist) routes_to_remove.insert(routes[k].size() - 1);
+            if (dist - demand[i] * cust_dist[i][0] > min_prof_dist || dist > min_time) routes_to_remove.insert(routes[k].size() - 1);
 
         }
 
@@ -79,14 +80,17 @@ private:
                 for (const int& i : customers) {
                     if (std::find(routes[k][m].begin(), routes[k][m].end(), i) != routes[k][m].end()) continue;
                     int dem = route_demand[k][m] + demand[i];
-                    int dist = route_dist[k][m] + cust_dist[routes[k][m][routes[k][m].size() - 1]][i] + cust_dist[i][0];
+                    int prev_cust = routes[k][m][routes[k][m].size() - 1];
+                    int dist_before_dest = route_dist[k][m] + cust_dist[prev_cust][i];
+                    int dist = dist_before_dest + cust_dist[i][0];
                     int min_time = std::min(route_min_time[k][m], cust_arr_time[i]);
-                    if (dem > size || dist > min_time) continue;
+                    if (dem > size || dist_before_dest + shortest_path_to_dest[i] > min_time) continue;
+
                     std::vector<int> route = routes[k][m];
                     route.emplace_back(i);
                     routes[k].emplace_back(route);
                     route_demand[k].emplace_back(dem);
-                    route_dist[k].emplace_back(dist - cust_dist[i][0]);
+                    route_dist[k].emplace_back(dist_before_dest);
                     route_stops[k].emplace_back(l);
                     route_min_time[k].emplace_back(min_time);
                     int cost = dist - demand[i] * cust_dist[i][0];
@@ -103,7 +107,7 @@ private:
                         if (ordered_best_costs.find(index) == ordered_best_costs.end()) ordered_best_costs[index] = best_child_cost[m];
                         else ordered_best_costs[index] = std::min(ordered_best_costs[index], best_child_cost[m]);
                     }
-                    else if (cost > min_prof_dist) routes_to_remove.insert(routes[k].size() - 1);
+                    else if (cost > min_prof_dist || dist > min_time) routes_to_remove.insert(routes[k].size() - 1);
 
                     // If routes with same costumers in different order
                     if (!exists && ordered_best_costs.find(index) == ordered_best_costs.end()) ordered_best_costs[index] = cost;
@@ -276,9 +280,9 @@ public:
     std::vector<std::vector<int>> route_min_time;
     std::vector<int> first_route_index;
     std::vector<std::set<int>> route_cust_idx;
-    
-    // Column Generation
-    int outer_iterations = 0;
+
+    // Shortest path
+    std::vector<int> shortest_path_to_dest;
 
     // Timings
     double total_lp_solve_time = 0;
@@ -383,6 +387,25 @@ public:
             dest_and_cust.insert(i);
             if (i > 0) customers.insert(i);
         }
+		// Shortest path to destination
+        shortest_path_to_dest.resize(no_cust_d);
+        for (const int& i : customers) {
+            shortest_path_to_dest[i] = cust_dist[i][0];
+        }
+        while (true) {
+            bool any_change = false;
+            for (const int& i : customers) {
+                for (const int& j : customers) {
+                    if (i == j) continue;
+                    if (shortest_path_to_dest[i] > cust_dist[i][j] + shortest_path_to_dest[j]) {
+                        shortest_path_to_dest[i] = cust_dist[i][j] + shortest_path_to_dest[j];
+                        any_change = true;
+                    }
+                }
+            }
+            if (!any_change) break;
+        }
+
 
         rounded_cap.resize(no_cust * (no_cust - 1) / 2.0);
         max_cap = 0;

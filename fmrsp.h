@@ -63,7 +63,7 @@ private:
         // Zeta
         if (cap_type == "COCF") {
             for (const int& i : customers) {
-                for (const int j : dest_and_cust) {
+                for (const int j : customers) {
                     if (i == j) continue;
                     zeta_indices.insert(i * no_cust_d + j);
                 }
@@ -1660,8 +1660,8 @@ public:
         add_constraints();
         model->set(GRB_IntAttr_ModelSense, GRB_MAXIMIZE);
 
-        auto stop = std::chrono::high_resolution_clock::now();
-        model_construction_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
+auto stop = std::chrono::high_resolution_clock::now();
+model_construction_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
     }
 
     // Optimises the model
@@ -1676,7 +1676,7 @@ public:
     void solve_root_relaxation(bool separate_rci = true, bool silent = true, bool preprocess_instance = true) {
         if (preprocess_instance) preprocess();
         if (model_construction_time == 0) create_model(true, silent);
-
+        model->set(GRB_DoubleParam_BestObjStop, 4761);
         auto start = std::chrono::high_resolution_clock::now();
         optimise_model();
         initial_lp = model->get(GRB_DoubleAttr_ObjVal);
@@ -1687,7 +1687,7 @@ public:
             std::cout << initial_lp << std::endl;
             std::set<std::tuple<int, int, double>> x_solution;
             std::set<std::tuple<int, int, double>> gamma_solution;
-			std::unordered_map<int, double> tau_solution;
+            std::unordered_map<int, double> tau_solution;
             std::vector<RC_Inequality> violated_inequalties;
 
             double max_viol = 0;
@@ -1743,5 +1743,71 @@ public:
         mip = model->get(GRB_DoubleAttr_ObjVal);
         auto stop = std::chrono::high_resolution_clock::now();
         mip_solve_time += std::chrono::duration_cast<std::chrono::duration<double>>(stop - start).count();
+    }
+
+    // Prints routes
+    void print_routes() {
+        std::unordered_set<int> psi_indices_in_routes;
+        std::unordered_set<int> customers_visited;
+        int total_profit = 0;
+        for (const int k : vehicles) {
+            std::cout << "Vehicle " << k << " (" << capacity[k] - veh_occ[k] << "): ";
+            int current_vert = 0;
+            int next_vert = -1;
+            int time = 0;
+            int dem = 0;
+			int latest_arr_time = veh_arr_time[k];
+            int profit = 0;
+            for (const int& i : dest_and_cust) {
+                int idx = k * no_cust_d + i;
+                if (!gamma_indices.contains(idx)) continue;
+                if (gamma[idx].get(GRB_DoubleAttr_X) > 0.5) {
+                    next_vert = i;
+					time += veh_dist[k][i];
+                    break;
+                }
+            }
+            if (next_vert == -1) {
+                std::cout << std::endl;
+                continue;
+            }
+            while (true) {
+                std::cout << next_vert << " ";
+                if (next_vert == 0) {
+                    profit -= time;
+                    total_profit += profit;
+                    std::cout << " -- " << "(" << dem << ", " << time << ") -- " << latest_arr_time << " " << profit << std::endl;
+                    break;
+                }
+				current_vert = next_vert;
+				dem += demand[current_vert];
+				latest_arr_time = std::min(latest_arr_time, cust_arr_time[current_vert]);
+				profit += demand[current_vert] * cust_dist[current_vert][0];
+		        customers_visited.insert(current_vert);
+                if (main_type == "2I") {
+                    for (const int& i : dest_and_cust) {
+                        int idx = current_vert * no_cust_d + i;
+                        if (!psi_indices.contains(idx)) continue;
+                        if (psi[idx].get(GRB_DoubleAttr_X) > 0.5) {
+                            next_vert = i;
+							time += cust_dist[current_vert][i];
+							psi_indices_in_routes.insert(idx);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        for (const int& idx : psi_indices) {
+            if (psi[idx].get(GRB_DoubleAttr_X) > 0.1 && !psi_indices_in_routes.contains(idx)) {
+				std::cout << "Subtour: " << int(floor(idx / no_cust_d)) << " -> " << idx - int(floor(idx / no_cust_d)) * no_cust_d << std::endl;
+            }
+        }
+        for (const int& idx : tau_indices) {
+            if (tau[idx].get(GRB_DoubleAttr_X) > 0.1 && !customers_visited.contains(idx)) {
+                std::cout << "Customer " << idx << " not serviced." << std::endl;
+            }
+		}
+        std::cout << total_profit << std::endl;
     }
 };

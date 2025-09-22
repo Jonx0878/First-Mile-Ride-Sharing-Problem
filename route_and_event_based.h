@@ -51,7 +51,7 @@ private:
         if (size == 0) return;
         for (const int& i : customers) {
             const int min_time = std::min(cust_arr_time[i], veh_arr_time[k]);
-            if (demand[i] > size || veh_dist[k][i] + cust_dist[i][0] > min_time) continue;
+            if (demand[i] > size || veh_dist[k][i] + shortest_path_to_dest[i] > min_time) continue;
             vertex = { i };
             veh_vertices[k].emplace_back(vertex);
             no_stops[k].emplace_back(1);
@@ -68,7 +68,7 @@ private:
                     const int demand_sum = demand_verts[k][n] + demand[i];
                     const int min_time = std::min(min_times[k][n], cust_arr_time[i]);
                     const int min_dist_prev_vert = min_dist_prev[k][n] + cust_dist[veh_vertices[k][n][0]][i];
-                    if (demand_sum > size || min_dist_prev_vert + cust_dist[i][0] > min_time) continue;
+                    if (demand_sum > size || min_dist_prev_vert + shortest_path_to_dest[i] > min_time) continue;
                     // Add vertex
                     vertex = { i };
                     int first_cust = veh_vertices[k][n][0];
@@ -82,6 +82,7 @@ private:
                     }
                     if (!inserted) vertex.emplace_back(first_cust);
                     const std::string str = vert_to_str(vertex);
+
                     if (duplicate_detector.find(str) != duplicate_detector.end()) {
                         int idx = duplicate_detector[str];
                         min_dist_prev[k][idx] = std::min(min_dist_prev[k][idx], min_dist_prev_vert);
@@ -141,30 +142,7 @@ private:
                 for (int n = 1; n <= size - demand_verts[k][i] + 1; n++) {
                     min_costs_n_step[k][idx][n] = std::min(min_costs_n_step[k][idx][n], min_costs_n_step[k][i][n - 1] + min_cost_diff);
                 }
-                max_next_distance[idx] = std::max(max_next_distance[idx], min_dist_prev[k][idx] + next_dist);
-                min_next_distance[idx] = std::min(min_next_distance[idx], min_dist_prev[k][idx] + next_dist);
             }
-        }
-
-        // Calculate min_cost and events with visiting same customers
-        std::unordered_map<int, std::string> vert_to_num;
-        std::unordered_map<std::string, std::vector<int>> num_to_verts;
-        for (int idx = 1; idx < veh_vertices[k].size(); idx++) {
-            min_costs[k][idx] = *std::ranges::min_element(min_costs_n_step[k][idx]);
-            std::vector<int> vertex;
-            int first_cust = veh_vertices[k][idx][0];
-            bool inserted = false;
-            for (int m = 1; m < veh_vertices[k][idx].size(); m++) {
-                if (!inserted && first_cust < veh_vertices[k][idx][m]) {
-                    vertex.emplace_back(first_cust);
-                    inserted = true;
-                }
-                vertex.emplace_back(veh_vertices[k][idx][m]);
-            }
-            if (!inserted) vertex.emplace_back(first_cust);
-            const std::string str = vert_to_str(vertex);
-            vert_to_num[idx] = str;
-            num_to_verts[str].emplace_back(idx);
         }
 
         // Remove vertices that cannot be optimal choices due to a better order
@@ -172,25 +150,14 @@ private:
         std::vector<bool> keep_vertex(veh_vertices[k].size());
         keep_vertex[0] = true;
         for (int idx = 1; idx < veh_vertices[k].size(); idx++) {
+            min_costs[k][idx] = *std::ranges::min_element(min_costs_n_step[k][idx]);
+
             keep_vertex[idx] = true;
 
+            // Event cannot be part of a profitable route
             if (min_costs[k][idx] > min_profitable_cost) {
                 keep_vertex[idx] = false;
                 continue;
-            }
-            std::string vert_as_num = vert_to_num[idx];
-            if (num_to_verts[vert_as_num].size() == 1) {
-                continue;
-            }
-            int max_other_next_dist = -time_ub;
-            int min_other_current_dist = time_ub;
-            for (const int i : num_to_verts[vert_as_num]) {
-                if (i == idx) continue;
-                max_other_next_dist = std::max(max_other_next_dist, max_next_distance[i]);
-                if (demand_verts[k][idx] == size) {
-                    min_other_current_dist = std::min(min_other_current_dist,
-                        min_dist_prev[k][i] + cust_dist[veh_vertices[k][i][0]][0]);
-                }
             }
         }
 
@@ -375,7 +342,9 @@ public:
     std::unordered_set<int> var_indices;
     std::unordered_set<int> var_indices_subset;
 
-    // Graph Data
+    // Shortest path
+    std::vector<int> shortest_path_to_dest;
+
     // Graph Data
     std::vector<std::vector<int>> vertices;
     std::vector<std::vector<std::vector<int>>> veh_vertices;
@@ -456,42 +425,36 @@ public:
 
         std::cout << "Constructing Routes..." << std::endl;
 
-        
+
         std::set<int> routes_to_remove;
         std::vector<int> best_child_cost;
         // Determine possible routes pr vehicle
         for (const int& k : vehicles) {
             int size = capacity[k] - veh_occ[k];
             std::vector<std::set<int>> possible_next_events(veh_vertices[k].size());
-            std::unordered_map<int, int> index_mapping;
+            std::unordered_map<std::string, int> index_mapping;
             for (int idx = 1; idx < no_stops_indices[k][std::min(int(size), 2)]; idx++) {
-                index_mapping[veh_vertices[k][idx][0]] = idx;
+                index_mapping[vert_to_str(veh_vertices[k][idx])] = idx;
             }
             if (size >= 2) {
                 for (int idx = no_stops_indices[k][2]; idx < no_stops_indices[k][size + 1]; idx++) {
-                    int index = 0;
-                    int mult = 1;
-                    for (const int& i : veh_vertices[k][idx]) {
-                        index += mult * i;
-                        mult *= pow(10, cust_magn);
-                    }
-                    index_mapping[index] = idx;
+					std::string next_event_index = vert_to_str(veh_vertices[k][idx]);
+                    index_mapping[next_event_index] = idx;
+                    // Determine evetns from which this is reachable in one step
                     for (int i = 1; i < no_stops[k][idx]; i++) {
-                        int index = veh_vertices[k][idx][i];
-                        int mult = pow(10, cust_magn);
+                        std::vector<int> current_event = { veh_vertices[k][idx][i] };
                         for (int j = 1; j < no_stops[k][idx]; j++) {
                             if (i == j) continue;
-                            index += mult * veh_vertices[k][idx][j];
-                            mult *= pow(10, cust_magn);
+                            current_event.emplace_back(veh_vertices[k][idx][j]);
                         }
-                        if (index_mapping.find(index) != index_mapping.end()) {
-                            possible_next_events[index_mapping[index]].insert(idx);
+                        std::string current_event_index = vert_to_str(current_event);
+                        if (index_mapping.contains(current_event_index)) {
+                            possible_next_events[index_mapping.at(current_event_index)].insert(idx);
                         }
                     }
                 }
+
             }
-
-
 
             const int min_profitable_cost = (veh_occ[k] == 0) ? 0 : veh_dist[k][0];
             std::vector<int> stop_index;
@@ -512,18 +475,19 @@ public:
             for (int idx = no_stops_indices[k][1]; idx < no_stops_indices[k][2]; idx++) {
                 int i = veh_vertices[k][idx][0];
                 std::vector<int> route;
-                int dist = veh_dist[k][i] + cust_dist[i][0];
-                int min_time = min_times[k][idx];
-                if (demand[i] > size || dist > min_time) continue;
+                int dist_before_dest = veh_dist[k][i];
+                int dist = dist_before_dest + cust_dist[i][0];
+                int min_time = std::min(veh_arr_time[k], cust_arr_time[i]);
+                if (demand[i] > size || dist_before_dest + shortest_path_to_dest[i] > min_time) continue;
                 route.emplace_back(idx);
                 routes.emplace_back(route);
                 route_demand.emplace_back(demand[i]);
-                route_dist.emplace_back(dist - cust_dist[i][0]);
+                route_dist.emplace_back(dist_before_dest);
                 route_stops.emplace_back(1);
                 route_min_time.emplace_back(min_time);
                 route_cost.emplace_back(dist - demand[i] * cust_dist[i][0]);
                 best_child_cost.emplace_back(dist - demand[i] * cust_dist[i][0]);
-                if (route_cost[routes.size() - 1] > min_profitable_cost) {
+                if (route_cost[routes.size() - 1] > min_profitable_cost || dist > min_time) {
                     routes_to_remove.insert(routes.size() - 1);
                 }
             }
@@ -534,20 +498,20 @@ public:
                 std::unordered_map<std::string, int> ordered_best_costs;
                 std::unordered_map<std::string, std::unordered_set<int>> index_to_routes;
                 for (int m = stop_index[l - 1]; m < stop_index[l]; m++) {
-                   for (const int& idx : possible_next_events[routes[m][route_stops[m] - 1]]) {
+					int prev_vert = routes[m][route_stops[m] - 1];
+                   for (const int& idx : possible_next_events[prev_vert]) {
                         int i = veh_vertices[k][idx][0];
                         int dem = route_demand[m] + demand[i];
-
-                        int prev_cust = veh_vertices[k][routes[m][route_stops[m] - 1]][0];
-                        int dist = route_dist[m] + cust_dist[prev_cust][i] + cust_dist[i][0];
+                        int prev_cust = veh_vertices[k][prev_vert][0];
+                        int dist_before_dest = route_dist[m] + cust_dist[prev_cust][i];
+                        int dist = dist_before_dest + cust_dist[i][0];
                         int min_time = std::min(route_min_time[m], cust_arr_time[i]);
-                        if (dem > size || dist > min_time) continue;
-
+                        if (dem > size || dist_before_dest + shortest_path_to_dest[i] > min_time) continue;
                         std::vector<int> route = routes[m];
                         route.emplace_back(idx);
                         routes.emplace_back(route);
                         route_demand.emplace_back(dem);
-                        route_dist.emplace_back(dist - cust_dist[i][0]);
+                        route_dist.emplace_back(dist_before_dest);
                         route_stops.emplace_back(l);
                         route_min_time.emplace_back(min_time);
                         int cost = dist - demand[i] * cust_dist[i][0];
@@ -555,13 +519,11 @@ public:
                             cost -= demand[veh_vertices[k][j][0]] * cust_dist[veh_vertices[k][j][0]][0];
                         }
                         route_cost.emplace_back(cost);
-
                         std::vector<int> cust_sorted;
                         for (const int& i : veh_vertices[k][route[route_stops[m]]]) {
                             cust_sorted.emplace_back(i);
                         }
                         std::sort(cust_sorted.begin(), cust_sorted.end());
-
                         std::string index = vert_to_str(cust_sorted);
                         int mult = 1;
                         bool exists = false;
@@ -571,8 +533,7 @@ public:
                             if (ordered_best_costs.find(index) == ordered_best_costs.end()) ordered_best_costs[index] = best_child_cost[m];
                             else ordered_best_costs[index] = std::min(ordered_best_costs[index], best_child_cost[m]);
                         }
-                        else if (cost > min_profitable_cost) routes_to_remove.insert(routes.size() - 1);
-
+                        else if (cost > min_profitable_cost || dist > min_time) routes_to_remove.insert(routes.size() - 1);
                         // If routes with same costumers in different order
                         if (!exists && ordered_best_costs.find(index) == ordered_best_costs.end()) ordered_best_costs[index] = cost;
                         // Remove if better route with same set of customers
@@ -679,6 +640,25 @@ public:
             dest_and_cust.insert(i);
             if (i > 0) customers.insert(i);
         }
+        // Shortest path to destination
+        shortest_path_to_dest.resize(no_cust_d);
+        for (const int& i : customers) {
+            shortest_path_to_dest[i] = cust_dist[i][0];
+        }
+        while (true) {
+            bool any_change = false;
+            for (const int& i : customers) {
+                for (const int& j : customers) {
+                    if (i == j) continue;
+                    if (shortest_path_to_dest[i] > cust_dist[i][j] + shortest_path_to_dest[j]) {
+                        shortest_path_to_dest[i] = cust_dist[i][j] + shortest_path_to_dest[j];
+                        any_change = true;
+                    }
+                }
+            }
+            if (!any_change) break;
+        }
+
 
         rounded_cap.resize(no_cust * (no_cust - 1) / 2.0);
         max_cap = 0;
