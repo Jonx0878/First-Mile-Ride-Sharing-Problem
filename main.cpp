@@ -75,7 +75,7 @@ std::vector<std::string> TEST_INSTANCES{
 int main() {
 	//{ "A-n60-k19", "B-n58-k19", "P-n75-k25", "X-n82-k27", "M-n90-k30", "F-n101-k33" }
 
-	for (const std::string file : {"F-n101-k33"}) {
+	for (const std::string file : {"X-n111-k36"}) {
 		auto start = std::chrono::high_resolution_clock::now();
 		// Works only in visual studio
 		//FILE* stream;
@@ -93,8 +93,8 @@ int main() {
 		//std::cerr.rdbuf(logFile.rdbuf());
 		//FMRSP inst = FMRSP(file, "2I", "COCF", "TTCF", THREADS, TIME_LIMIT);
 		//inst.preprocess();
-		//EB inst = EB(file, "TTCF", THREADS, TIME_LIMIT);
-		REB inst = REB(file, THREADS, TIME_LIMIT);
+		EB inst = EB(file, "TTCF", THREADS, TIME_LIMIT);
+		//REB inst = REB(file, THREADS, TIME_LIMIT);
 		//inst.print_all_routes();
 
 		if (RELAX) inst.solve_root_relaxation(SEPARATE_RCI, SILENT, PREPROCESS);
@@ -129,22 +129,22 @@ int main() {
 		//	std::cout << "d" << std::endl;
 		//}
 		//REB Solution
-		for (const auto& idx : inst.var_indices_subset) {
-			if (inst.vars[idx].get(GRB_DoubleAttr_X) <= 0.1) continue;
-			int k = 0;
-			while (idx >= inst.first_route_index[k + 1]) k++;
-			std::cout << k << ": ";
-			for (const int& j : inst.routes[idx]) {
-				std::cout << "(";
-		            for (int i : inst.veh_vertices[k][j]) {
-		                std::cout << " " << i << ",";
-		            }
-		            std::cout << ")->";
-					
-					/*inst.veh_vertices[k][j][0] << "->";*/
-			}
-			std::cout << "d" << std::endl;
-		}
+		//for (const auto& idx : inst.var_indices_subset) {
+		//	if (inst.vars[idx].get(GRB_DoubleAttr_X) <= 0.1) continue;
+		//	int k = 0;
+		//	while (idx >= inst.first_route_index[k + 1]) k++;
+		//	std::cout << k << ": ";
+		//	for (const int& j : inst.routes[idx]) {
+		//		std::cout << "(";
+		//            for (int i : inst.veh_vertices[k][j]) {
+		//                std::cout << " " << i << ",";
+		//            }
+		//            std::cout << ")->";
+		//			
+		//			/*inst.veh_vertices[k][j][0] << "->";*/
+		//	}
+		//	std::cout << "d" << std::endl;
+		//}
 		//for (int idx : inst.flow_indices) {
 		//	if (inst.flow[idx].get(GRB_DoubleAttr_X) >= 0.5) std::cout << inst.flow[idx].get(GRB_DoubleAttr_X) << " " << inst.flow[idx].get(GRB_StringAttr_VarName) << std::endl;
 		//}

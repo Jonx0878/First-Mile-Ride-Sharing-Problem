@@ -766,13 +766,13 @@ public:
 			// Construct Indices for sigma and omega
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
-                    if (i == j || edges_i_to_j[i][j].size() == 0) continue;
+                    if (i == j) continue;
                     omega_indices.insert(i * no_cust_d + j);
 					int max_ub = std::numeric_limits<int>::min();
                     for (const int& k : vehicles) {
                         max_ub = std::max(max_ub, u[k][i][j] - shortest_path_from_veh[k][i]);
                     }
-                    if (max_ub > 0) sigma_indices.insert(i * no_cust_d + j);
+                    sigma_indices.insert(i * no_cust_d + j);
                 }
             }
 
@@ -892,12 +892,14 @@ public:
                 }
                 // Second term
                 for (const int& k : vehicles) {
-                    for (const int& idx : edges_in_cust[k][i]) {
+                    for (const int& j : dest_and_cust) {
+                        if (i == j) continue;
                         int time = 0;
-                        int j = vertices[edges[idx].first][0];
                         if (j == 0) time = veh_dist[k][i];
                         else time = cust_dist[j][i];
-                        lexpr2 += time * vars[idx];
+                        for (const int& idx : edges_cust_k_i_to_j[k][j][i]) {                              
+                            lexpr2 += time * vars[idx];
+                        }
                     }
                 }
                 // RHS
