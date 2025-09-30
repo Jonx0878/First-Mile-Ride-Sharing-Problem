@@ -75,7 +75,7 @@ std::vector<std::string> TEST_INSTANCES{
 int main() {
 	//{ "A-n60-k19", "B-n58-k19", "P-n75-k25", "X-n82-k27", "M-n90-k30", "F-n101-k33" }
 
-	for (const std::string file : {"M-n150-k49"}) {
+	for (const std::string file : {"X-n121-k40"}) {
 		auto start = std::chrono::high_resolution_clock::now();
 		// Works only in visual studio
 		//FILE* stream;

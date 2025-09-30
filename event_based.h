@@ -782,27 +782,12 @@ public:
         }
         else if (time_constr == "TTCF") {
 			// Construct Indices for sigma and omega
-            //for (const auto& idx : var_indices) {
-            //    int k = 0;
-            //    while (idx >= first_var_index[k + 1]) k++;
-            //    int i = edges[idx].first;
-            //    int i_cust = vertices[i][0];
-            //    int j = edges[idx].second;
-            //    int j_cust = vertices[j][0];
-            //    if (i == 0 || j == 0) continue;
-            //    omega_indices.insert(i * no_cust_d + j);
-            //    sigma_indices.insert(i * no_cust_d + j);
-            //}
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
   
                     omega_indices.insert(i * no_cust_d + j);
-					int max_ub = std::numeric_limits<int>::min();
-                    for (const int& k : vehicles) {
-                        max_ub = std::max(max_ub, u[k][i][j] - shortest_path_from_veh[k][i]);
-                    }
-                    if (max_ub >= 0) sigma_indices.insert(i * no_cust_d + j);
+                    sigma_indices.insert(i* no_cust_d + j);
                 }
             }
 
@@ -949,12 +934,10 @@ public:
 						for (const int& v_idx : edges_cust_k_i_to_j[k][i][j]) {
                             lexpr += (u[k][i][j]) * vars[v_idx];
                             lexpr2 += shortest_path_from_veh[k][i] * vars[v_idx];
-
-
                         }
                     }
                     model->addConstr(sigma[idx] <= lexpr);
-                    model->addConstr(sigma[idx] >= lexpr2);
+                    //model->addConstr(sigma[idx] >= lexpr2);
 
                     lexpr.clear();
                     lexpr2.clear();
