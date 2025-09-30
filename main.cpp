@@ -75,7 +75,7 @@ std::vector<std::string> TEST_INSTANCES{
 int main() {
 	//{ "A-n60-k19", "B-n58-k19", "P-n75-k25", "X-n82-k27", "M-n90-k30", "F-n101-k33" }
 
-	for (const std::string file : {"X-n111-k36"}) {
+	for (const std::string file : {"M-n150-k49"}) {
 		auto start = std::chrono::high_resolution_clock::now();
 		// Works only in visual studio
 		//FILE* stream;
@@ -94,7 +94,7 @@ int main() {
 		//FMRSP inst = FMRSP(file, "2I", "COCF", "TTCF", THREADS, TIME_LIMIT);
 		//inst.preprocess();
 		EB inst = EB(file, "TTCF", THREADS, TIME_LIMIT);
-		//REB inst = REB(file, THREADS, TIME_LIMIT);
+		//RB inst = RB(file, THREADS, TIME_LIMIT);
 		//inst.print_all_routes();
 
 		if (RELAX) inst.solve_root_relaxation(SEPARATE_RCI, SILENT, PREPROCESS);
@@ -167,7 +167,7 @@ int main() {
 		//	if (inst.gamma[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.gamma[idx].get(GRB_DoubleAttr_X) << " " << inst.gamma[idx].get(GRB_StringAttr_VarName) << std::endl;
 		//}
 		//for (int idx : inst.sigma_indices) {
-		//	if (inst.sigma[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.sigma[idx].get(GRB_DoubleAttr_X) << " " << inst.sigma[idx].get(GRB_StringAttr_VarName) << std::endl;
+		//	if (inst.sigma[idx].get(GRB_DoubleAttr_X) > 0.5) std::cout << inst.sigma[idx].get(GRB_DoubleAttr_X) << " " << inst.sigma[idx].get(GRB_StringAttr_VarName) << std::endl;
 		//}
 		//for (int idx : inst.omega_indices) {
 		//	if (inst.omega[idx].get(GRB_DoubleAttr_X) > 0) std::cout << inst.omega[idx].get(GRB_DoubleAttr_X) << " " << inst.omega[idx].get(GRB_StringAttr_VarName) << std::endl;

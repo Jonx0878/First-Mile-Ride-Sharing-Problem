@@ -630,13 +630,14 @@ public:
                 shortest_path_from_veh[k].resize(no_cust_d);
                 for (const int& i : dest_and_cust) {
                     shortest_path_from_veh[k][i] = veh_dist[k][i];
+                    //std::cout << k << "->" << i << " " << veh_dist[k][i] << std::endl;
                 }
             }
             while (true) {
                 bool any_change = false;
                 for (const int& k : vehicles) {
                     for (const int& i : customers) {
-                        for (const int& j : customers) {
+                        for (const int& j : dest_and_cust) {
                             if (i == j) continue;
                             if (shortest_path_from_veh[k][j] > cust_dist[i][j] + shortest_path_from_veh[k][i]) {
                                 shortest_path_from_veh[k][j] = cust_dist[i][j] + shortest_path_from_veh[k][i];
@@ -647,6 +648,7 @@ public:
                 }
                 if (!any_change) break;
             }
+
 
             // u
             u.resize(no_veh);
@@ -661,6 +663,22 @@ public:
                     }
                 }
             }
+
+            //for (const int& k : vehicles) {
+            //    for (const int& i : customers) {
+            //        for (const int& j : dest_and_cust) {
+            //            if (i == j) continue;
+            //                if (u[k][i][j] < shortest_path_from_veh[k][i] - 1e-9) {
+            //                    std::cerr << "Violation: u(" << k << "," << i << "," << j << ")="
+            //                        << u[k][i][j]
+            //                        << " < sp(" << k << "," << i << ")=" << shortest_path_from_veh[k][i]
+            //                        << "\n";
+            //                }
+            //                
+            //            
+            //        }
+            //    }
+            //}
         }
 
         // Determine profits
@@ -764,15 +782,27 @@ public:
         }
         else if (time_constr == "TTCF") {
 			// Construct Indices for sigma and omega
+            //for (const auto& idx : var_indices) {
+            //    int k = 0;
+            //    while (idx >= first_var_index[k + 1]) k++;
+            //    int i = edges[idx].first;
+            //    int i_cust = vertices[i][0];
+            //    int j = edges[idx].second;
+            //    int j_cust = vertices[j][0];
+            //    if (i == 0 || j == 0) continue;
+            //    omega_indices.insert(i * no_cust_d + j);
+            //    sigma_indices.insert(i * no_cust_d + j);
+            //}
             for (const int& i : customers) {
                 for (const int& j : dest_and_cust) {
                     if (i == j) continue;
+  
                     omega_indices.insert(i * no_cust_d + j);
 					int max_ub = std::numeric_limits<int>::min();
                     for (const int& k : vehicles) {
                         max_ub = std::max(max_ub, u[k][i][j] - shortest_path_from_veh[k][i]);
                     }
-                    sigma_indices.insert(i * no_cust_d + j);
+                    if (max_ub >= 0) sigma_indices.insert(i * no_cust_d + j);
                 }
             }
 
@@ -884,22 +914,17 @@ public:
                     if (i == j) continue;
                     const int idx = j * no_cust_d + i;
                     if (sigma_indices.contains(idx)) lexpr += sigma[idx];
-                    for (const int& k : vehicles) {
-                        for (const int& idx : edges_cust_k_i_to_j[k][j][i]) {
-                            lexpr += shortest_path_from_veh[k][j] * vars[idx];
-                        }
-                    }
                 }
                 // Second term
                 for (const int& k : vehicles) {
-                    for (const int& j : dest_and_cust) {
-                        if (i == j) continue;
-                        int time = 0;
-                        if (j == 0) time = veh_dist[k][i];
-                        else time = cust_dist[j][i];
-                        for (const int& idx : edges_cust_k_i_to_j[k][j][i]) {                              
-                            lexpr2 += time * vars[idx];
-                        }
+                    for (const int& v_idx : edges_cust_k_i_to_j[k][0][i]) {
+                        lexpr2 += veh_dist[k][i] * vars[v_idx];
+                    }
+                }
+                for (const int& j : customers) {
+                    if (i == j) continue;
+                    for (const int& v_idx : edges_i_to_j[j][i]) {
+                        lexpr2 += cust_dist[j][i] * vars[v_idx];
                     }
                 }
                 // RHS
@@ -907,11 +932,6 @@ public:
                     if (i == j) continue;
                     const int idx = i * no_cust_d + j;
                     if (sigma_indices.contains(idx)) lexpr3 += sigma[idx];
-                    for (const int& k : vehicles) {
-                        for (const int& idx : edges_cust_k_i_to_j[k][i][j]) {
-                            lexpr3 += shortest_path_from_veh[k][i] * vars[idx];
-                        }
-                    }
                 }
                 model->addConstr(lexpr + lexpr2 == lexpr3);
                 lexpr.clear();
@@ -926,20 +946,26 @@ public:
                     if (!sigma_indices.contains(idx)) continue;
                     // RHS
                     for (const int& k : vehicles) {
-						for (const int& idx : edges_cust_k_i_to_j[k][i][j]) {
-                            lexpr += (u[k][i][j] - shortest_path_from_veh[k][i]) * vars[idx];
+						for (const int& v_idx : edges_cust_k_i_to_j[k][i][j]) {
+                            lexpr += (u[k][i][j]) * vars[v_idx];
+                            lexpr2 += shortest_path_from_veh[k][i] * vars[v_idx];
+
+
                         }
                     }
                     model->addConstr(sigma[idx] <= lexpr);
+                    model->addConstr(sigma[idx] >= lexpr2);
+
                     lexpr.clear();
+                    lexpr2.clear();
                 }
             }
             // TTCF.3 (2.18)
             for (const int& i : customers) {
                 // LHS
                 for (const int& k : vehicles) {
-                    for (const int& idx : edges_cust_k_i_to_j[k][0][i]) {
-                        lexpr += veh_arr_time[k] * vars[idx];
+                    for (const int& v_idx : edges_cust_k_i_to_j[k][0][i]) {
+                        lexpr += veh_arr_time[k] * vars[v_idx];
                     }
                 }
                 for (const int& j : customers) {
@@ -977,18 +1003,11 @@ public:
                 // LHS
                 const int idx = i * no_cust_d + 0;
                 if (sigma_indices.contains(idx)) lexpr += sigma[idx];
-                for (const int& k : vehicles) {
-                    for (const int& v_idx : edges_cust_k_i_to_j[k][i][0]) {
-                        lexpr += cust_dist[i][0] * vars[v_idx];
-                    }
+                for (const int& v_idx : edges_i_to_j[i][0]) {
+                    lexpr += cust_dist[i][0] * vars[v_idx];
                 }
                 // RHS
                 if (omega_indices.contains(idx)) lexpr2 += omega[idx];
-                for (const int& k : vehicles) {
-                    for (const int& v_idx : edges_cust_k_i_to_j[k][i][0]) {
-                        lexpr2 -= shortest_path_from_veh[k][i] * vars[v_idx];
-                    }
-                }
                 model->addConstr(lexpr <= lexpr2);
                 lexpr.clear();
                 lexpr2.clear();

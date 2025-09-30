@@ -1579,17 +1579,18 @@ public:
         for (const int& k : vehicles) {
 			shortest_path_from_veh[k].resize(no_cust_d);
             for (const int& i : dest_and_cust) {
-				shortest_path_from_veh[k][i] = veh_dist[k][i];
+				shortest_path_from_veh[k][i] = veh_dist[k][i] - 1;
             }
 		}
         while (true) {
             bool any_change = false;
             for (const int& k : vehicles) {
                 for (const int& i : customers) {
-                    for (const int& j : customers) {
+                    for (const int& j : dest_and_cust) {
                         if (i == j) continue;
-                        if (shortest_path_from_veh[k][j] > cust_dist[i][j] + shortest_path_from_veh[k][i]) {
-                            shortest_path_from_veh[k][j] = cust_dist[i][j] + shortest_path_from_veh[k][i];
+                        int dist_i_to_j = cust_dist[i][j] + shortest_path_from_veh[k][i];
+                        if (shortest_path_from_veh[k][j] > dist_i_to_j) {
+                            shortest_path_from_veh[k][j] = dist_i_to_j;
                             any_change = true;
                         }
                     }
