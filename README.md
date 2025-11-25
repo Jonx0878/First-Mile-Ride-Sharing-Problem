@@ -1,4 +1,4 @@
-[[![DOI](https://zenodo.org/badge/jonx0878.svg)](https://zenodo.org/badge/latestdoi/jonx0878)](https://doi.org/10.5281/zenodo.17709283)
+[![DOI](https://zenodo.org/badge/1038476333.svg)](https://doi.org/10.5281/zenodo.17709282)
 # First-Mile-Ride-Sharing-Problem
 This repository provides the code used in Mathematical Programming Formulations for the First-Mile Ride-Sharing Problem
 
